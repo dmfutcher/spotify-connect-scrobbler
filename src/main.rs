@@ -96,7 +96,6 @@ fn setup(args: &[String]) -> Setup {
         .optopt("", "spotify-username", "Username to sign in with", "USERNAME")
         .optopt("", "spotify-password", "Password", "PASSWORD")
         .optflag("", "disable-discovery", "Disable discovery mode")
-        .optopt("", "backend", "Audio backend to use. Use '?' to list options", "BACKEND")
         .optopt("", "device", "Audio device to use. Use '?' to list options", "DEVICE")
         .optopt("", "mixer", "Mixer to use", "MIXER")
         .optopt("", "lastfm-username", "Last.fm Username", "LASTFM_USERNAME")
@@ -121,7 +120,7 @@ fn setup(args: &[String]) -> Setup {
              version::short_now(),
              version::build_id());
 
-    let backend_name = matches.opt_str("backend").or(Some(String::from("pipe")));
+    let backend_name = Some(String::from("nil"));
     if backend_name == Some("?".into()) {
         list_backends();
         exit(0);

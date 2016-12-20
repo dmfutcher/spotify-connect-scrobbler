@@ -14,13 +14,13 @@ fn mk_sink<S: Sink + Open + 'static>(device: Option<String>) -> Box<Sink> {
     Box::new(S::open(device))
 }
 
-mod pipe;
-use self::pipe::StdoutSink;
+mod nil;
+use self::nil::NilSink;
 
 pub const BACKENDS : &'static [
     (&'static str, fn(Option<String>) -> Box<Sink>)
 ] = &[
-    ("pipe", mk_sink::<StdoutSink>),
+    ("nil", mk_sink::<NilSink>),
 ];
 
 pub fn find(name: Option<String>) -> Option<fn(Option<String>) -> Box<Sink>> {
