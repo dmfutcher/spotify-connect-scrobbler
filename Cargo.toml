@@ -1,12 +1,12 @@
 [package]
-name = "librespot"
+name = "spotify-connect-scrobbler"
 version = "0.1.0"
-authors = ["Paul Liétar <paul@lietar.net>"]
+authors = ["David Futcher <david@futcher.io>", "Paul Liétar <paul@lietar.net>"]
 build = "build.rs"
 license = "MIT"
-description = "Open Source Spotify client library"
-keywords = ["spotify"]
-repository = "https://github.com/plietar/librespot"
+description = "Spotify server-side Scrobbler"
+keywords = ["spotify", "last.fm", "scrobble"]
+repository = "https://github.com/bobbo/spotify-connect-scrobbler"
 readme = "README.md"
 
 [lib]
@@ -14,7 +14,7 @@ name = "librespot"
 path = "src/lib.rs"
 
 [[bin]]
-name = "librespot"
+name = "spotify-connect-scrobbler"
 path = "src/main.rs"
 doc = false
 
