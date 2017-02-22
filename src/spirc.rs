@@ -372,6 +372,13 @@ impl SpircTask {
                     self.player.stop();
                     self.mixer.stop();
                 }
+                else
+                {
+                    // Message Notify concerns an external client
+                    // `frame` should contain enough information to track playing tracks on
+                    // external clients
+                    println!("{:?}", frame);
+                }
             }
 
             _ => (),
