@@ -37,4 +37,3 @@ impl Sink for StdoutSink {
         Ok(())
     }
 }
-
