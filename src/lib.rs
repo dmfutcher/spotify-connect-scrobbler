@@ -2,6 +2,9 @@
 
 #![cfg_attr(feature = "cargo-clippy", allow(unused_io_amount))]
 
+// TODO: many items from tokio-core::io have been deprecated in favour of tokio-io
+#![allow(deprecated)]
+
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate futures;
 #[macro_use] extern crate lazy_static;
@@ -29,6 +32,7 @@ extern crate tempfile;
 extern crate tokio_core;
 extern crate tokio_proto;
 extern crate url;
+extern crate uuid;
 
 pub extern crate librespot_protocol as protocol;
 
@@ -40,8 +44,8 @@ extern crate tremor as vorbis;
 #[cfg(feature = "alsa-backend")]
 extern crate alsa;
 
-#[cfg(feature = "portaudio")]
-extern crate portaudio;
+#[cfg(feature = "portaudio-rs")]
+extern crate portaudio_rs;
 
 #[cfg(feature = "libpulse-sys")]
 extern crate libpulse_sys;
@@ -65,6 +69,6 @@ pub mod session;
 pub mod util;
 pub mod version;
 pub mod mixer;
-
+pub mod keymaster;
 
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

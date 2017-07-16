@@ -22,7 +22,7 @@ doc = false
 path = "protocol"
 
 [dependencies]
-base64          = "0.4.0"
+base64          = "0.5.0"
 bit-set         = "0.4.0"
 byteorder       = "1.0"
 env_logger      = "0.4.0"
@@ -37,8 +37,8 @@ num-traits      = "0.1.36"
 protobuf        = "1.1"
 rand            = "0.3.13"
 rpassword       = "0.3.0"
-rust-crypto     = "0.2.34"
 rustfm-scrobble = "0.2.0"
+rust-crypto     = { git = "https://github.com/awmath/rust-crypto.git", branch = "avx2" }
 serde           = "0.9.6"
 serde_json      = "0.9.5"
 serde_derive    = "0.9.6"
@@ -56,6 +56,7 @@ futures = "0.1.8"
 tokio-core = "0.1.2"
 tokio-proto = "0.1.0"
 tokio-signal = "0.1"
+uuid = { version = "0.4", features = ["v4"] }
 
 [build-dependencies]
 vergen          = "0.1.0"

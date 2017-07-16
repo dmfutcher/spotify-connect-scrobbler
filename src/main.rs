@@ -1,3 +1,6 @@
+// TODO: many items from tokio-core::io have been deprecated in favour of tokio-io
+#![allow(deprecated)]
+
 #[macro_use] extern crate log;
 extern crate env_logger;
 extern crate futures;
@@ -73,6 +76,7 @@ struct Setup {
 
     mixer: fn() -> Box<Mixer>,
 
+    name: String,
     cache: Option<Cache>,
     config: Config,
     credentials: Option<Credentials>,
@@ -82,6 +86,7 @@ struct Setup {
 fn setup(args: &[String]) -> Setup {
     let mut opts = getopts::Options::new();
     opts.optopt("c", "cache", "Path to a directory where files will be cached.", "CACHE")
+        .optflag("", "disable-audio-cache", "Disable caching of the audio data.")
         .reqopt("n", "name", "Device name", "NAME")
         .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
@@ -116,7 +121,7 @@ fn setup(args: &[String]) -> Setup {
         exit(0);
     }
 
-    let backend = audio_backend::find(backend_name.as_ref())
+    let backend = audio_backend::find(backend_name)
         .expect("Invalid backend");
 
     let mixer_name = matches.opt_str("mixer");
@@ -129,9 +134,10 @@ fn setup(args: &[String]) -> Setup {
 
     let name = matches.opt_str("name").unwrap();
     let device_id = librespot::session::device_id(&name);
+    let use_audio_cache = !matches.opt_present("disable-audio-cache");
 
     let cache = matches.opt_str("c").map(|cache_location| {
-        Cache::new(PathBuf::from(cache_location))
+        Cache::new(PathBuf::from(cache_location), use_audio_cache)
     });
 
     let cached_credentials = cache.as_ref().and_then(Cache::credentials);
@@ -144,7 +150,6 @@ fn setup(args: &[String]) -> Setup {
 
     let config = Config {
         user_agent: version::version_string(),
-        name: name,
         device_id: device_id,
         bitrate: bitrate,
         onstart: matches.opt_str("onstart"),
@@ -154,6 +159,7 @@ fn setup(args: &[String]) -> Setup {
     let device = matches.opt_str("device");
 
     Setup {
+        name: name,
         backend: backend,
         cache: cache,
         config: config,
@@ -165,6 +171,7 @@ fn setup(args: &[String]) -> Setup {
 }
 
 struct Main {
+    name: String,
     cache: Option<Cache>,
     config: Config,
     backend: fn(Option<String>) -> Box<Sink>,
@@ -184,6 +191,7 @@ struct Main {
 
 impl Main {
     fn new(handle: Handle,
+           name: String,
            config: Config,
            cache: Option<Cache>,
            backend: fn(Option<String>) -> Box<Sink>,
@@ -192,6 +200,7 @@ impl Main {
     {
         Main {
             handle: handle.clone(),
+            name: name,
             cache: cache,
             config: config,
             backend: backend,
@@ -208,8 +217,9 @@ impl Main {
     }
 
     fn discovery(&mut self) {
-        let name = self.config.name.clone();
         let device_id = self.config.device_id.clone();
+        let name = self.name.clone();
+
         self.discovery = Some(discovery(&self.handle, name, device_id).unwrap());
     }
 
@@ -256,7 +266,7 @@ impl Future for Main {
                     (backend)(device)
                 });
 
-                let (spirc, spirc_task) = Spirc::new(session, player, mixer);
+                let (spirc, spirc_task) = Spirc::new(self.name.clone(), session, player, mixer);
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
 
@@ -298,9 +308,9 @@ fn main() {
     let handle = core.handle();
 
     let args: Vec<String> = std::env::args().collect();
-    let Setup { backend, config, device, cache, enable_discovery, credentials, mixer } = setup(&args);
+    let Setup { name, backend, config, device, cache, enable_discovery, credentials, mixer } = setup(&args);
 
-    let mut task = Main::new(handle, config.clone(), cache, backend, device, mixer);
+    let mut task = Main::new(handle, name, config, cache, backend, device, mixer);
     if enable_discovery {
         task.discovery();
     }
