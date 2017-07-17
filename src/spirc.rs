@@ -426,10 +426,19 @@ impl SpircTask {
                 }
                 else
                 {
-                    // Message Notify concerns an external client
-                    // `frame` should contain enough information to track playing tracks on
-                    // external clients
-                    println!("{:?}", frame);
+                    // scrobble hacks here
+                    
+                    // Inactive devices won't be playing anything, so we don't need to scrobble it
+                    if !frame.get_device_state().get_is_active() {
+                        return ();
+                    }
+
+                    //println!("{:?}", frame);
+                    //println!("Type: {:?}", frame.get_typ());
+                    let state = frame.get_state();
+                    let playing_index = state.get_playing_track_index();
+
+                    println!("Current track: {:?}", state.get_track()[playing_index as usize]);
                 }
             }
 
