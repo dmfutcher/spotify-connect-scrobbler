@@ -437,8 +437,11 @@ impl SpircTask {
                     //println!("Type: {:?}", frame.get_typ());
                     let state = frame.get_state();
                     let playing_index = state.get_playing_track_index();
+                    let playing_track_ref = state.get_track()[playing_index as usize].clone();
 
-                    println!("Current track: {:?}", state.get_track()[playing_index as usize]);
+                    let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
+
+                    println!("Current track: {:?}", playing_track_spotify_id);
                 }
             }
 
