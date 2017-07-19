@@ -26,7 +26,7 @@ use librespot::authentication::discovery::{discovery, DiscoveryStream};
 use librespot::audio_backend::{self, Sink, BACKENDS};
 use librespot::cache::Cache;
 use librespot::player::Player;
-use librespot::scrobbler::Scrobbler;
+use librespot::scrobbler::{ScrobblerConfig};
 use librespot::session::{Bitrate, Config, Session};
 use librespot::mixer::{self, Mixer};
 
@@ -70,7 +70,6 @@ fn list_backends() {
     }
 }
 
-#[derive(Clone)]
 struct Setup {
     backend: fn(Option<String>) -> Box<Sink>,
     device: Option<String>,
@@ -82,6 +81,7 @@ struct Setup {
     config: Config,
     credentials: Option<Credentials>,
     enable_discovery: bool,
+    scrobbler_config: ScrobblerConfig
 }
 
 fn setup(args: &[String]) -> Setup {
@@ -93,12 +93,16 @@ fn setup(args: &[String]) -> Setup {
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
         .optflag("v", "verbose", "Enable verbose output")
-        .optopt("u", "username", "Username to sign in with", "USERNAME")
-        .optopt("p", "password", "Password", "PASSWORD")
+        .optopt("", "spotify-username", "Username to sign in with", "USERNAME")
+        .optopt("", "spotify-password", "Password", "PASSWORD")
         .optflag("", "disable-discovery", "Disable discovery mode")
         .optopt("", "backend", "Audio backend to use. Use '?' to list options", "BACKEND")
         .optopt("", "device", "Audio device to use. Use '?' to list options", "DEVICE")
-        .optopt("", "mixer", "Mixer to use", "MIXER");
+        .optopt("", "mixer", "Mixer to use", "MIXER")
+        .optopt("", "lastfm-username", "Last.fm Username", "LASTFM_USERNAME")
+        .optopt("", "lastfm-password", "Last.fm Password", "LASTFM_PASSWORD")
+        .optopt("", "lastfm-api-key", "Last.fm API Key", "API_KEY")
+        .optopt("", "lastfm-api-secret", "Last.fm API Secret", "SECRET");
 
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => m,
@@ -144,8 +148,8 @@ fn setup(args: &[String]) -> Setup {
 
     let cached_credentials = cache.as_ref().and_then(Cache::credentials);
 
-    let credentials = get_credentials(matches.opt_str("username"),
-                                      matches.opt_str("password"),
+    let credentials = get_credentials(matches.opt_str("spotify-username"),
+                                      matches.opt_str("spotify-password"),
                                       cached_credentials);
 
     let enable_discovery = !matches.opt_present("disable-discovery");
@@ -156,6 +160,13 @@ fn setup(args: &[String]) -> Setup {
         bitrate: bitrate,
         onstart: matches.opt_str("onstart"),
         onstop: matches.opt_str("onstop"),
+    };
+
+    let scrobbler_config = ScrobblerConfig {
+        api_key: matches.opt_str("lastfm-api-key").expect("Invalid Last.fm API key"),
+        api_secret: matches.opt_str("lastfm-api-secret").expect("Invalid Last.fm API secret"),
+        username: matches.opt_str("lastfm-username").expect("Invalid Last.fm username"),
+        password: matches.opt_str("lastfm-password").expect("Invalid Last.fm password")
     };
 
     let device = matches.opt_str("device");
@@ -169,6 +180,7 @@ fn setup(args: &[String]) -> Setup {
         device: device,
         enable_discovery: enable_discovery,
         mixer: mixer,
+        scrobbler_config: scrobbler_config
     }
 }
 
@@ -188,6 +200,8 @@ struct Main {
     spirc_task: Option<SpircTask>,
     connect: Box<Future<Item=Session, Error=io::Error>>,
 
+    scrobbler_config: ScrobblerConfig,
+
     shutdown: bool,
 }
 
@@ -198,7 +212,8 @@ impl Main {
            cache: Option<Cache>,
            backend: fn(Option<String>) -> Box<Sink>,
            device: Option<String>,
-           mixer: fn() -> Box<Mixer>) -> Main
+           mixer: fn() -> Box<Mixer>,
+           scrobbler_config: ScrobblerConfig) -> Main
     {
         Main {
             handle: handle.clone(),
@@ -215,6 +230,7 @@ impl Main {
             spirc_task: None,
             shutdown: false,
             signal: tokio_signal::ctrl_c(&handle).flatten_stream().boxed(),
+            scrobbler_config: scrobbler_config
         }
     }
 
@@ -268,9 +284,7 @@ impl Future for Main {
                     (backend)(device)
                 });
 
-                let scrobbler = Scrobbler::new(session.clone());
-
-                let (spirc, spirc_task) = Spirc::new(self.name.clone(), session, player, mixer, scrobbler);
+                let (spirc, spirc_task) = Spirc::new(self.name.clone(), session, player, mixer, self.scrobbler_config.clone());
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
 
@@ -312,9 +326,9 @@ fn main() {
     let handle = core.handle();
 
     let args: Vec<String> = std::env::args().collect();
-    let Setup { name, backend, config, device, cache, enable_discovery, credentials, mixer } = setup(&args);
+    let Setup { name, backend, config, device, cache, enable_discovery, credentials, mixer, scrobbler_config } = setup(&args);
 
-    let mut task = Main::new(handle, name, config, cache, backend, device, mixer);
+    let mut task = Main::new(handle, name, config, cache, backend, device, mixer, scrobbler_config);
     if enable_discovery {
         task.discovery();
     }

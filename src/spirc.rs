@@ -8,7 +8,7 @@ use protobuf::{self, Message};
 use mercury::MercuryError;
 use player::Player;
 use mixer::Mixer;
-use scrobbler::Scrobbler;
+use scrobbler::{Scrobbler, ScrobblerConfig};
 use session::Session;
 use util::{now_ms, SpotifyId, SeqGenerator};
 use version;
@@ -121,7 +121,7 @@ fn initial_device_state(name: String, volume: u16) -> DeviceState {
 }
 
 impl Spirc {
-    pub fn new(name: String, session: Session, player: Player, mixer: Box<Mixer>, scrobbler: Scrobbler)
+    pub fn new(name: String, session: Session, player: Player, mixer: Box<Mixer>, scrobbler_config: ScrobblerConfig)
         -> (Spirc, SpircTask)
     {
         debug!("new Spirc[{}]", session.session_id());
@@ -146,6 +146,8 @@ impl Spirc {
         let volume = 0xFFFF;
         let device = initial_device_state(name, volume);
         mixer.set_volume(volume);
+
+        let scrobbler = Scrobbler::new(scrobbler_config);
 
         let mut task = SpircTask {
             player: player,

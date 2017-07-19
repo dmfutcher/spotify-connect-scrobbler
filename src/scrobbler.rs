@@ -8,10 +8,19 @@ use metadata::Track;
 use session::Session;
 use util::SpotifyId;
 
+#[derive(Clone, Debug)]
+pub struct ScrobblerConfig {
+    pub api_key: String,
+    pub api_secret: String,
+    pub username: String,
+    pub password: String
+}
+
 pub struct Scrobbler {
-    session: Session,
+    config: ScrobblerConfig,
     scrobbler: rustfm_scrobble::Scrobbler,
 
+    session: Option<Session>,
     current_track_id: Option<SpotifyId>,
 
     auth: BoxFuture<(), rustfm_scrobble::ScrobblerError>
@@ -19,12 +28,14 @@ pub struct Scrobbler {
 
 impl Scrobbler {
 
-    pub fn new(session: Session) -> Scrobbler {
+    pub fn new(config: ScrobblerConfig) -> Scrobbler {
+        info!("{:?}", config);
         let mut scrobbler = Scrobbler {
-            session: session,
-            scrobbler: rustfm_scrobble::Scrobbler::new(String::new(), String::new()),
+            session: None,
+            scrobbler: rustfm_scrobble::Scrobbler::new(config.api_key.clone(), config.api_secret.clone()),
             current_track_id: None,
-            auth: future::empty().boxed()
+            auth: future::empty().boxed(),
+            config: config
         };
 
         scrobbler.start_auth();
@@ -36,7 +47,7 @@ impl Scrobbler {
     }
 
     pub fn auth(&mut self) -> BoxFuture<(), rustfm_scrobble::ScrobblerError> {
-        match self.scrobbler.authenticate(String::new(), String::new()) {
+        match self.scrobbler.authenticate(self.config.username.clone(), self.config.password.clone()) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(err)
         }.boxed()
@@ -51,7 +62,7 @@ impl Future for Scrobbler {
     fn poll(&mut self) -> Poll<Result<(), ()>, ()> {
         match self.auth.poll() {
             Ok(Async::Ready(_)) => {
-                info!("READY");
+                info!("Authenticated with Last.fm")
             },
             Ok(Async::NotReady) => {
                 return Ok(Async::NotReady)
