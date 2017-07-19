@@ -147,7 +147,7 @@ impl Spirc {
         let device = initial_device_state(name, volume);
         mixer.set_volume(volume);
 
-        let scrobbler = Scrobbler::new(scrobbler_config);
+        let scrobbler = Scrobbler::new(scrobbler_config, session.clone());
 
         let mut task = SpircTask {
             player: player,
@@ -456,11 +456,14 @@ impl SpircTask {
                     //println!("Type: {:?}", frame.get_typ());
                     let state = frame.get_state();
                     let playing_index = state.get_playing_track_index();
-                    let playing_track_ref = state.get_track()[playing_index as usize].clone();
+                    let tracks = state.get_track();
+                    if tracks.len() > 0 {
+                        let playing_track_ref = state.get_track()[playing_index as usize].clone();
+                        let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
 
-                    let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
-
-                    println!("Current track: {:?}", playing_track_spotify_id);
+                        self.scrobbler.update_current_track(playing_track_spotify_id);
+                        println!("Current track: {:?}", playing_track_spotify_id);
+                    }
                 }
             }
 
