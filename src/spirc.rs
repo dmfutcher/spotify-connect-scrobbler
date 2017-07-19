@@ -249,7 +249,7 @@ impl Future for SpircTask {
                     Ok(Async::NotReady) => {
 
                     },
-                    Err(err) => {
+                    Err(_) => {
                         panic!("Scrobbler panic");
                     }
                 }

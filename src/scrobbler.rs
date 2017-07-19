@@ -20,16 +20,15 @@ pub struct Scrobbler {
 impl Scrobbler {
 
     pub fn new(session: Session) -> Scrobbler {
-        let scrobbler = rustfm_scrobble::Scrobbler::new(String::new(), String::new());
-
-        let mut ret = Scrobbler {
+        let mut scrobbler = Scrobbler {
             session: session,
-            scrobbler: scrobbler,
+            scrobbler: rustfm_scrobble::Scrobbler::new(String::new(), String::new()),
             current_track_id: None,
             auth: future::empty().boxed()
         };
-        ret.start_auth();
-        ret
+
+        scrobbler.start_auth();
+        scrobbler
     }
 
     pub fn start_auth(&mut self) {
@@ -37,7 +36,6 @@ impl Scrobbler {
     }
 
     pub fn auth(&mut self) -> BoxFuture<(), rustfm_scrobble::ScrobblerError> {
-        println!("In auth future");
         match self.scrobbler.authenticate(String::new(), String::new()) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(err)
@@ -53,12 +51,13 @@ impl Future for Scrobbler {
     fn poll(&mut self) -> Poll<Result<(), ()>, ()> {
         match self.auth.poll() {
             Ok(Async::Ready(_)) => {
-
+                info!("READY");
             },
             Ok(Async::NotReady) => {
-
+                return Ok(Async::NotReady)
             },
             Err(err) => {
+                error!("Authentication error: {:?}", err);
                 return Err(())
             }
         }
