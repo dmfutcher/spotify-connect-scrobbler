@@ -26,6 +26,7 @@ use librespot::authentication::discovery::{discovery, DiscoveryStream};
 use librespot::audio_backend::{self, Sink, BACKENDS};
 use librespot::cache::Cache;
 use librespot::player::Player;
+use librespot::scrobbler::Scrobbler;
 use librespot::session::{Bitrate, Config, Session};
 use librespot::mixer::{self, Mixer};
 
@@ -267,7 +268,9 @@ impl Future for Main {
                     (backend)(device)
                 });
 
-                let (spirc, spirc_task) = Spirc::new(self.name.clone(), session, player, mixer);
+                let scrobbler = Scrobbler::new(session.clone());
+
+                let (spirc, spirc_task) = Spirc::new(self.name.clone(), session, player, mixer, scrobbler);
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
 

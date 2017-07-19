@@ -8,6 +8,7 @@ use protobuf::{self, Message};
 use mercury::MercuryError;
 use player::Player;
 use mixer::Mixer;
+use scrobbler::Scrobbler;
 use session::Session;
 use util::{now_ms, SpotifyId, SeqGenerator};
 use version;
@@ -32,6 +33,8 @@ pub struct SpircTask {
 
     shutdown: bool,
     session: Session,
+
+    scrobbler: Scrobbler
 }
 
 pub enum SpircCommand {
@@ -118,7 +121,7 @@ fn initial_device_state(name: String, volume: u16) -> DeviceState {
 }
 
 impl Spirc {
-    pub fn new(name: String, session: Session, player: Player, mixer: Box<Mixer>)
+    pub fn new(name: String, session: Session, player: Player, mixer: Box<Mixer>, scrobbler: Scrobbler)
         -> (Spirc, SpircTask)
     {
         debug!("new Spirc[{}]", session.session_id());
@@ -162,6 +165,8 @@ impl Spirc {
 
             shutdown: false,
             session: session.clone(),
+
+            scrobbler: scrobbler
         };
 
         let spirc = Spirc {
@@ -234,6 +239,18 @@ impl Future for SpircTask {
                     Ok(Async::NotReady) => (),
                     Err(oneshot::Canceled) => {
                         self.end_of_track = future::empty().boxed()
+                    }
+                }
+
+                match self.scrobbler.poll() {
+                    Ok(Async::Ready(_)) => {
+                        progress = true;
+                    },
+                    Ok(Async::NotReady) => {
+
+                    },
+                    Err(err) => {
+                        panic!("Scrobbler panic");
                     }
                 }
             }
