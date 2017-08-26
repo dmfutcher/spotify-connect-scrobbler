@@ -160,7 +160,6 @@ impl Scrobbler {
         match self.current_track_start {
             Some(start_time) => {
                 let play_time = start_time.elapsed();
-                info!("Current track play time: {:?}", play_time);
                 
                 if play_time > Duration::new(20, 0) {
                     return true
@@ -195,7 +194,6 @@ impl Future for Scrobbler {
         }
 
         if self.can_scrobble_track() {
-            info!("Starting scrobble future");
             self.scrobble_future = Some(self.send_scrobble());
         }
 

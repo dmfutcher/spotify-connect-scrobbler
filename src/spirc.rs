@@ -251,8 +251,8 @@ impl Future for SpircTask {
                     Ok(Async::NotReady) => {
 
                     },
-                    Err(_) => {
-                        panic!("Scrobbler panic");
+                    Err(err) => {
+                        error!("Scrobbler error: {:?}", err);
                     }
                 }
             }
@@ -462,11 +462,10 @@ impl SpircTask {
                         let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
 
                         self.scrobbler.update_current_track(playing_track_spotify_id);
-                        println!("Current track: {:?}", playing_track_spotify_id);
+                        info!("Relevant SPIRC frame; Current track Spotify ID: {:?}", playing_track_spotify_id);
                     }
                 }
             }
-
             _ => (),
         }
     }
