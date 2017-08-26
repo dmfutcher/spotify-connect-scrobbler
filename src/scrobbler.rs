@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use futures::{Future, BoxFuture, Async, Poll};
 use futures::future;
 use rustfm_scrobble;
@@ -20,10 +22,14 @@ pub struct Scrobbler {
 
     session: Session,
     current_track_id: Option<SpotifyId>,
+    current_track_start: Option<Instant>,
+    current_track_meta: Option<(String, String)>,
+    current_track_scrobbled: bool,
 
     auth: BoxFuture<(), rustfm_scrobble::ScrobblerError>,
     now_playing: BoxFuture<(), ScrobbleError>,
-    meta_fetch: BoxFuture<(String, String), ScrobbleError>
+    meta_fetch: BoxFuture<(String, String), ScrobbleError>,
+    scrobble_future: Option<BoxFuture<(), ScrobbleError>>
 }
 unsafe impl Send for Scrobbler {}
 unsafe impl Sync for Scrobbler {}
@@ -50,9 +56,13 @@ impl Scrobbler {
             session: session,
             scrobbler: rustfm_scrobble::Scrobbler::new(config.api_key.clone(), config.api_secret.clone()),
             current_track_id: None,
+            current_track_start: None,
+            current_track_meta: None,
+            current_track_scrobbled: false,
             auth: future::empty().boxed(),
             now_playing: future::empty().boxed(),
             meta_fetch: future::empty().boxed(),
+            scrobble_future: None,
             config: config
         };
 
@@ -72,6 +82,7 @@ impl Scrobbler {
     }
 
     pub fn update_current_track(&mut self, track_id: SpotifyId) {
+        // TODO: Doesn't understand when a track is played on repeat
         let mut new_track = false;
 
         match self.current_track_id {
@@ -90,6 +101,9 @@ impl Scrobbler {
         }
 
         self.current_track_id = Some(track_id.clone());
+        self.current_track_start = Some(Instant::now());
+        self.current_track_meta = None;
+        self.current_track_scrobbled = false;
         self.meta_fetch = self.get_track_meta(track_id.clone());
     }
 
@@ -116,6 +130,48 @@ impl Scrobbler {
         }.boxed()
     }
 
+    pub fn send_scrobble(&self) -> BoxFuture<(), ScrobbleError> {
+        match self.current_track_meta {
+            Some(ref meta) => {
+                let (artist, track) = meta.clone();
+                info!("Scrobbling: {} - {}", artist, track);
+
+                match self.scrobbler.scrobble(track, artist) {
+                    Ok(_) => future::ok(()),
+                    Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
+                }.boxed()
+            },
+            None => future::err(ScrobbleError::new("No track metadata available".to_string())).boxed()
+        }
+    }
+
+    fn can_scrobble_track(&self) -> bool {
+        if self.current_track_scrobbled {
+            return false
+        }
+
+        match self.scrobble_future {
+            Some(_) => {
+                return false
+            },
+            None => {}
+        }
+
+        match self.current_track_start {
+            Some(start_time) => {
+                let play_time = start_time.elapsed();
+                info!("Current track play time: {:?}", play_time);
+                
+                if play_time > Duration::new(20, 0) {
+                    return true
+                }
+
+                false
+            },
+            _ => false
+        }
+    }
+
 }
 
 impl Future for Scrobbler {
@@ -138,14 +194,43 @@ impl Future for Scrobbler {
             }
         }
 
+        if self.can_scrobble_track() {
+            info!("Starting scrobble future");
+            self.scrobble_future = Some(self.send_scrobble());
+        }
+
+        let mut track_scrobbled = false;
+        match self.scrobble_future {
+            Some(ref mut scrobble_future) => {
+                match scrobble_future.poll() {
+                    Ok(Async::Ready(_)) => {
+                        track_scrobbled = true;
+                    },
+                    Ok(Async::NotReady) => {
+
+                    },
+                    Err(err) => {
+                        error!("Scrobbling error: {:?}", err);
+                        return Err(())
+                    }
+                }
+            },
+            None => ()
+        }
+
+        if track_scrobbled {
+            self.scrobble_future = None;
+            self.current_track_scrobbled = true;
+        }
+
         match self.meta_fetch.poll() {
-            Ok(Async::Ready((artist, track))) => {
-                //info!("Metadata result: {:?}", meta);
+            Ok(Async::Ready((track, artist))) => {
                 self.meta_fetch = future::empty().boxed();
-                self.now_playing = self.send_now_playing(track, artist);
+                self.now_playing = self.send_now_playing(artist.clone(), track.clone());
+                self.current_track_meta = Some((artist.clone(), track.clone()));
             },
             Ok(Async::NotReady) => {
-                //return Ok(Async::NotReady)
+                
             },
             Err(err) => {
                 error!("Metadata fetch error: {:?}", err);
@@ -158,13 +243,15 @@ impl Future for Scrobbler {
                 self.now_playing = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
-                return Ok(Async::NotReady)
+                
             },
             Err(err) => {
                 error!("Now Playing error: {:?}", err);
                 return Err(())
             }
         }
+
+
 
         Ok(Async::NotReady)
     }
