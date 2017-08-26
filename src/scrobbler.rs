@@ -1,5 +1,3 @@
-use std::error::Error;
-
 use futures::{Future, BoxFuture, Async, Poll};
 use futures::future;
 use rustfm_scrobble;
@@ -109,6 +107,15 @@ impl Scrobbler {
         }).boxed()
     }
 
+    pub fn send_now_playing(&self, artist: String, track: String) -> BoxFuture<(), ScrobbleError> {
+        info!("Now-playing scrobble: {} - {}", artist, track);
+
+        match self.scrobbler.now_playing(track, artist) {
+            Ok(_) => future::ok(()),
+            Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
+        }.boxed()
+    }
+
 }
 
 impl Future for Scrobbler {
@@ -116,6 +123,7 @@ impl Future for Scrobbler {
     type Error = ();
 
     fn poll(&mut self) -> Poll<Result<(), ()>, ()> {
+
         match self.auth.poll() {
             Ok(Async::Ready(_)) => {
                 info!("Authenticated with Last.fm");
@@ -131,12 +139,13 @@ impl Future for Scrobbler {
         }
 
         match self.meta_fetch.poll() {
-            Ok(Async::Ready(meta)) => {
-                info!("Metadata result: {:?}", meta);
+            Ok(Async::Ready((artist, track))) => {
+                //info!("Metadata result: {:?}", meta);
                 self.meta_fetch = future::empty().boxed();
+                self.now_playing = self.send_now_playing(track, artist);
             },
             Ok(Async::NotReady) => {
-                return Ok(Async::NotReady)
+                //return Ok(Async::NotReady)
             },
             Err(err) => {
                 error!("Metadata fetch error: {:?}", err);
@@ -146,7 +155,6 @@ impl Future for Scrobbler {
 
         match self.now_playing.poll() {
             Ok(Async::Ready(_)) => {
-                info!("Cleaning up stale now_playing future");
                 self.now_playing = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
@@ -157,8 +165,6 @@ impl Future for Scrobbler {
                 return Err(())
             }
         }
-
-        
 
         Ok(Async::NotReady)
     }
