@@ -31,8 +31,6 @@ pub struct Scrobbler {
     meta_fetch: BoxFuture<(String, String), ScrobbleError>,
     scrobble_future: Option<BoxFuture<(), ScrobbleError>>
 }
-unsafe impl Send for Scrobbler {}
-unsafe impl Sync for Scrobbler {}
 
 #[derive(Debug)]
 pub struct ScrobbleError {
