@@ -9,9 +9,13 @@ To use *spotify-connect-scrobbler* have your Spotify username & password, your L
 
 Clone the repo & build with Cargo (`cargo build`). Then run:
 
-`./target/debug/spotify-connect-scrobbler --spotify-username <Spotify username> --spotify-password <Spotify password> --backend pipe --name Scrobbler --lastfm-username <Last.fm username> --lastfm-password <Last.fm password> --lastfm-api-key <Last.fm API key> --lastfm-api-secret <Last.fm API secret>`
+`./target/debug/spotify-connect-scrobbler --spotify-username <Spotify username> --spotify-password <Spotify password> --backend pipe --lastfm-username <Last.fm username> --lastfm-password <Last.fm password> --lastfm-api-key <Last.fm API key> --lastfm-api-secret <Last.fm API secret>`
 
 The service will sit in the background and log all Spotify tracks played from any Connect enabled client to the given Last.fm account. It is strongly recommended that you turn off Last.fm integration in any Spotify client where it is enabled (Desktop & Mobile apps). Instructions for the opposite [here](https://support.spotify.com/us/using_spotify/app_integrations/scrobble-to-last-fm/).
+
+#### Other Options
+
+* `--name <Device name>` - Sets the Spotify Connect device name (defaults to 'Scrobbler'), this name is visible in the Spotify Connect device chooser in Spotify clients
 
 # Implementation
  

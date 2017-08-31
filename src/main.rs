@@ -88,7 +88,7 @@ fn setup(args: &[String]) -> Setup {
     let mut opts = getopts::Options::new();
     opts.optopt("c", "cache", "Path to a directory where files will be cached.", "CACHE")
         .optflag("", "disable-audio-cache", "Disable caching of the audio data.")
-        .reqopt("n", "name", "Device name", "NAME")
+        .optopt("n", "name", "Device name (defaults to Scrobbler)", "NAME")
         .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
@@ -138,7 +138,7 @@ fn setup(args: &[String]) -> Setup {
         .map(|bitrate| Bitrate::from_str(bitrate).expect("Invalid bitrate"))
         .unwrap_or(Bitrate::Bitrate160);
 
-    let name = matches.opt_str("name").unwrap();
+    let name = matches.opt_str("name").unwrap_or(String::from("Scrobbler"));
     let device_id = librespot::session::device_id(&name);
     let use_audio_cache = !matches.opt_present("disable-audio-cache");
 
