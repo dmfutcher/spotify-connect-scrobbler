@@ -26,9 +26,9 @@ pub struct Scrobbler {
     current_track_meta: Option<(String, String)>,
     current_track_scrobbled: bool,
 
-    auth: BoxFuture<(), rustfm_scrobble::ScrobblerError>,
-    now_playing: BoxFuture<(), ScrobbleError>,
-    meta_fetch: BoxFuture<(String, String), ScrobbleError>,
+    auth_future: BoxFuture<(), rustfm_scrobble::ScrobblerError>,
+    now_playing_future: BoxFuture<(), ScrobbleError>,
+    meta_fetch_future: BoxFuture<(String, String), ScrobbleError>,
     scrobble_future: Option<BoxFuture<(), ScrobbleError>>
 }
 
@@ -57,9 +57,9 @@ impl Scrobbler {
             current_track_start: None,
             current_track_meta: None,
             current_track_scrobbled: false,
-            auth: future::empty().boxed(),
-            now_playing: future::empty().boxed(),
-            meta_fetch: future::empty().boxed(),
+            auth_future: future::empty().boxed(),
+            now_playing_future: future::empty().boxed(),
+            meta_fetch_future: future::empty().boxed(),
             scrobble_future: None,
             config: config
         };
@@ -69,7 +69,7 @@ impl Scrobbler {
     }
 
     pub fn start_auth(&mut self) {
-        self.auth = self.auth();
+        self.auth_future = self.auth();
     }
 
     pub fn auth(&mut self) -> BoxFuture<(), rustfm_scrobble::ScrobblerError> {
@@ -102,7 +102,7 @@ impl Scrobbler {
         self.current_track_start = Some(Instant::now());
         self.current_track_meta = None;
         self.current_track_scrobbled = false;
-        self.meta_fetch = self.get_track_meta(track_id.clone());
+        self.meta_fetch_future = self.get_track_meta(track_id.clone());
     }
 
     pub fn get_track_meta(&mut self, track_id: SpotifyId) -> BoxFuture<(String, String), ScrobbleError> {
@@ -177,10 +177,10 @@ impl Future for Scrobbler {
 
     fn poll(&mut self) -> Poll<Result<(), ()>, ()> {
 
-        match self.auth.poll() {
+        match self.auth_future.poll() {
             Ok(Async::Ready(_)) => {
                 info!("Authenticated with Last.fm");
-                self.auth = future::empty().boxed();
+                self.auth_future = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
                 
@@ -219,10 +219,10 @@ impl Future for Scrobbler {
             self.current_track_scrobbled = true;
         }
 
-        match self.meta_fetch.poll() {
+        match self.meta_fetch_future.poll() {
             Ok(Async::Ready((track, artist))) => {
-                self.meta_fetch = future::empty().boxed();
-                self.now_playing = self.send_now_playing(artist.clone(), track.clone());
+                self.meta_fetch_future = future::empty().boxed();
+                self.now_playing_future = self.send_now_playing(artist.clone(), track.clone());
                 self.current_track_meta = Some((artist.clone(), track.clone()));
             },
             Ok(Async::NotReady) => {
@@ -234,9 +234,9 @@ impl Future for Scrobbler {
             }
         }
 
-        match self.now_playing.poll() {
+        match self.now_playing_future.poll() {
             Ok(Async::Ready(_)) => {
-                self.now_playing = future::empty().boxed();
+                self.now_playing_future = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
                 
