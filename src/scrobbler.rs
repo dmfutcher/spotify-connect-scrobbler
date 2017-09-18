@@ -98,6 +98,10 @@ impl Scrobbler {
             return
         }
 
+        if self.can_scrobble_track() {
+            self.start_scrobble();
+        }
+
         self.current_track_id = Some(track_id.clone());
         self.current_track_start = Some(Instant::now());
         self.current_track_meta = None;
@@ -128,19 +132,26 @@ impl Scrobbler {
         }.boxed()
     }
 
-    pub fn send_scrobble(&self) -> BoxFuture<(), ScrobbleError> {
-        match self.current_track_meta {
+    pub fn start_scrobble(&mut self) {
+        self.scrobble_future = match self.current_track_meta {
             Some(ref meta) => {
                 let (artist, track) = meta.clone();
-                info!("Scrobbling: {} - {}", artist, track);
-
-                match self.scrobbler.scrobble(track, artist) {
-                    Ok(_) => future::ok(()),
-                    Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
-                }.boxed()
+                Some(self.send_scrobble(artist, track))
             },
-            None => future::err(ScrobbleError::new("No track metadata available".to_string())).boxed()
+            None => {
+                error!("No track meta-data available for scrobble");
+                None
+            }
         }
+    }
+
+    pub fn send_scrobble(&self, artist: String, track: String) -> BoxFuture<(), ScrobbleError> {
+        info!("Scrobbling: {} - {}", artist, track);
+
+        match self.scrobbler.scrobble(track, artist) {
+            Ok(_) => future::ok(()),
+            Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
+        }.boxed()
     }
 
     fn can_scrobble_track(&self) -> bool {
@@ -183,7 +194,7 @@ impl Future for Scrobbler {
                 self.auth_future = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
-                
+                return Ok(Async::NotReady)
             },
             Err(err) => {
                 error!("Authentication error: {:?}", err);
@@ -192,7 +203,7 @@ impl Future for Scrobbler {
         }
 
         if self.can_scrobble_track() {
-            self.scrobble_future = Some(self.send_scrobble());
+            self.start_scrobble();
         }
 
         let mut track_scrobbled = false;
@@ -203,7 +214,7 @@ impl Future for Scrobbler {
                         track_scrobbled = true;
                     },
                     Ok(Async::NotReady) => {
-
+                        return Ok(Async::NotReady)
                     },
                     Err(err) => {
                         error!("Scrobbling error: {:?}", err);
