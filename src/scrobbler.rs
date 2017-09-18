@@ -27,6 +27,7 @@ pub struct Scrobbler {
     current_track_scrobbled: bool,
 
     auth_future: BoxFuture<(), rustfm_scrobble::ScrobblerError>,
+    new_track_future: BoxFuture<(), ()>,
     now_playing_future: BoxFuture<(), ScrobbleError>,
     meta_fetch_future: BoxFuture<(String, String), ScrobbleError>,
     scrobble_future: Option<BoxFuture<(), ScrobbleError>>
@@ -58,6 +59,7 @@ impl Scrobbler {
             current_track_meta: None,
             current_track_scrobbled: false,
             auth_future: future::empty().boxed(),
+            new_track_future: future::empty().boxed(),
             now_playing_future: future::empty().boxed(),
             meta_fetch_future: future::empty().boxed(),
             scrobble_future: None,
@@ -102,11 +104,16 @@ impl Scrobbler {
             self.start_scrobble();
         }
 
-        self.current_track_id = Some(track_id.clone());
+        self.new_track_future = self.set_new_track(track_id);
+    }
+
+    pub fn set_new_track(&mut self, track_id: SpotifyId) -> BoxFuture<(), ()> {
+        self.current_track_id = Some(track_id);
         self.current_track_start = Some(Instant::now());
         self.current_track_meta = None;
         self.current_track_scrobbled = false;
-        self.meta_fetch_future = self.get_track_meta(track_id.clone());
+
+        future::ok(()).boxed()
     }
 
     pub fn get_track_meta(&mut self, track_id: SpotifyId) -> BoxFuture<(String, String), ScrobbleError> {
@@ -194,7 +201,6 @@ impl Future for Scrobbler {
                 self.auth_future = future::empty().boxed();
             },
             Ok(Async::NotReady) => {
-                return Ok(Async::NotReady)
             },
             Err(err) => {
                 error!("Authentication error: {:?}", err);
@@ -230,6 +236,29 @@ impl Future for Scrobbler {
             self.current_track_scrobbled = true;
         }
 
+        match self.new_track_future.poll() {
+            Ok(Async::Ready(_)) => {
+                self.new_track_future = future::empty().boxed();
+                self.current_track_scrobbled = false;
+
+                match self.current_track_id {
+                    Some(track_id) => {
+                        self.meta_fetch_future = self.get_track_meta(track_id);
+                    },
+                    None => {
+
+                    }
+                }
+            },
+            Ok(Async::NotReady) => {
+
+            },
+            Err(err) => {
+                error!("Failed to set new current track: {:?}", err);
+                return Err(())
+            }
+        }
+
         match self.meta_fetch_future.poll() {
             Ok(Async::Ready((track, artist))) => {
                 self.meta_fetch_future = future::empty().boxed();
@@ -257,8 +286,6 @@ impl Future for Scrobbler {
                 return Err(())
             }
         }
-
-
 
         Ok(Async::NotReady)
     }
