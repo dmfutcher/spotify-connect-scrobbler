@@ -3,6 +3,7 @@ use std::time::{Duration, Instant};
 use futures::{Future, BoxFuture, Async, Poll};
 use futures::future;
 use rustfm_scrobble;
+use rustfm_scrobble::metadata::Scrobble;
 
 use metadata::{Track, Artist};
 use session::Session;
@@ -23,13 +24,13 @@ pub struct Scrobbler {
     session: Session,
     current_track_id: Option<SpotifyId>,
     current_track_start: Option<Instant>,
-    current_track_meta: Option<(String, String)>,
+    current_track_meta: Option<Scrobble>,
     current_track_scrobbled: bool,
 
     auth_future: BoxFuture<(), rustfm_scrobble::ScrobblerError>,
     new_track_future: BoxFuture<(), ()>,
     now_playing_future: BoxFuture<(), ScrobbleError>,
-    meta_fetch_future: BoxFuture<(String, String), ScrobbleError>,
+    meta_fetch_future: BoxFuture<Scrobble, ScrobbleError>,
     scrobble_future: Option<BoxFuture<(), ScrobbleError>>
 }
 
@@ -116,7 +117,7 @@ impl Scrobbler {
         future::ok(()).boxed()
     }
 
-    pub fn get_track_meta(&mut self, track_id: SpotifyId) -> BoxFuture<(String, String), ScrobbleError> {
+    pub fn get_track_meta(&mut self, track_id: SpotifyId) -> BoxFuture<Scrobble, ScrobbleError> {
         let metadata = self.session.metadata().clone();
 
         metadata.get::<Track>(track_id).and_then(move |track| {
@@ -126,14 +127,15 @@ impl Scrobbler {
         }).map_err(move |err| {
             ScrobbleError::new(format!("{:?}", err).to_owned())
         }).and_then(move |(track, artist)| {
-            future::ok((track.clone(), artist.clone()))
+            // TODO: Album support
+            future::ok(Scrobble::new(artist, track, String::new()))
         }).boxed()
     }
 
-    pub fn send_now_playing(&self, artist: String, track: String) -> BoxFuture<(), ScrobbleError> {
-        info!("Now-playing scrobble: {} - {}", artist, track);
+    pub fn send_now_playing(&self, track: Scrobble) -> BoxFuture<(), ScrobbleError> {
+        info!("Now-playing scrobble: {:?}", track.as_map());
 
-        match self.scrobbler.now_playing(track, artist) {
+        match self.scrobbler.now_playing(track) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
@@ -141,9 +143,10 @@ impl Scrobbler {
 
     pub fn start_scrobble(&mut self) {
         self.scrobble_future = match self.current_track_meta {
-            Some(ref meta) => {
-                let (artist, track) = meta.clone();
-                Some(self.send_scrobble(artist, track))
+            Some(meta) => {
+                // TODO: Need impl Clone on rustfm_scrobble::metadata::Scrobbler
+                let scrobble = meta.clone();
+                Some(self.send_scrobble(scrobble))
             },
             None => {
                 error!("No track meta-data available for scrobble");
@@ -152,10 +155,10 @@ impl Scrobbler {
         }
     }
 
-    pub fn send_scrobble(&self, artist: String, track: String) -> BoxFuture<(), ScrobbleError> {
-        info!("Scrobbling: {} - {}", artist, track);
+    pub fn send_scrobble(&self, scrobble: Scrobble) -> BoxFuture<(), ScrobbleError> {
+        info!("Scrobbling: {:?}", scrobble.as_map());
 
-        match self.scrobbler.scrobble(track, artist) {
+        match self.scrobbler.scrobble(scrobble) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
@@ -260,10 +263,10 @@ impl Future for Scrobbler {
         }
 
         match self.meta_fetch_future.poll() {
-            Ok(Async::Ready((track, artist))) => {
+            Ok(Async::Ready(track)) => {
                 self.meta_fetch_future = future::empty().boxed();
-                self.now_playing_future = self.send_now_playing(artist.clone(), track.clone());
-                self.current_track_meta = Some((artist.clone(), track.clone()));
+                self.now_playing_future = self.send_now_playing(track);
+                self.current_track_meta = Some(track);
             },
             Ok(Async::NotReady) => {
                 
