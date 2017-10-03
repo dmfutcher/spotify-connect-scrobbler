@@ -132,10 +132,10 @@ impl Scrobbler {
         }).boxed()
     }
 
-    pub fn send_now_playing(&self, track: Scrobble) -> BoxFuture<(), ScrobbleError> {
-        info!("Now-playing scrobble: {:?}", track.as_map());
+    pub fn send_now_playing(&self, track: &Scrobble) -> BoxFuture<(), ScrobbleError> {
+        info!("Now-playing scrobble: {:?}", track);
 
-        match self.scrobbler.now_playing(track) {
+        match self.scrobbler.now_playing(track.clone()) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
@@ -143,9 +143,8 @@ impl Scrobbler {
 
     pub fn start_scrobble(&mut self) {
         self.scrobble_future = match self.current_track_meta {
-            Some(meta) => {
-                // TODO: Need impl Clone on rustfm_scrobble::metadata::Scrobbler
-                let scrobble = meta.clone();
+            Some(ref meta) => {
+                let scrobble = &meta.clone();
                 Some(self.send_scrobble(scrobble))
             },
             None => {
@@ -155,10 +154,10 @@ impl Scrobbler {
         }
     }
 
-    pub fn send_scrobble(&self, scrobble: Scrobble) -> BoxFuture<(), ScrobbleError> {
-        info!("Scrobbling: {:?}", scrobble.as_map());
+    pub fn send_scrobble(&self, scrobble: &Scrobble) -> BoxFuture<(), ScrobbleError> {
+        info!("Scrobbling: {:?}", scrobble);
 
-        match self.scrobbler.scrobble(scrobble) {
+        match self.scrobbler.scrobble(scrobble.clone()) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
@@ -263,10 +262,10 @@ impl Future for Scrobbler {
         }
 
         match self.meta_fetch_future.poll() {
-            Ok(Async::Ready(track)) => {
+            Ok(Async::Ready(ref track)) => {
                 self.meta_fetch_future = future::empty().boxed();
                 self.now_playing_future = self.send_now_playing(track);
-                self.current_track_meta = Some(track);
+                self.current_track_meta = Some(track.clone());
             },
             Ok(Async::NotReady) => {
                 
