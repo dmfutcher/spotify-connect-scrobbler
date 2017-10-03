@@ -5,7 +5,7 @@ use futures::future;
 use rustfm_scrobble;
 use rustfm_scrobble::metadata::Scrobble;
 
-use metadata::{Track, Artist};
+use metadata::{Track, Artist, Album};
 use session::Session;
 use util::SpotifyId;
 
@@ -121,14 +121,15 @@ impl Scrobbler {
         let metadata = self.session.metadata().clone();
 
         metadata.get::<Track>(track_id).and_then(move |track| {
-            let track_name = track.name;
+            let track_name = track.clone().name;
             let artist = *track.artists.first().expect("No artists");
-            metadata.get::<Artist>(artist).map(|artist| (track_name, artist.name.clone()))
+            metadata.clone().get::<Artist>(artist).map(|artist| (track_name, artist.name.clone(), track, metadata))
+        }).and_then(move |(track_name, artist_name, track_meta, metadata)| {
+            metadata.get::<Album>(track_meta.album).map(|album| (track_name, artist_name, album.name.clone()))
         }).map_err(move |err| {
             ScrobbleError::new(format!("{:?}", err).to_owned())
-        }).and_then(move |(track, artist)| {
-            // TODO: Album support
-            future::ok(Scrobble::new(artist, track, String::new()))
+        }).and_then(move |(track, artist, album)| {
+            future::ok(Scrobble::new(artist, track, album))
         }).boxed()
     }
 
