@@ -23,7 +23,7 @@ dependencies = [
  "rand 0.3.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "rpassword 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rust-crypto 0.2.36 (git+https://github.com/awmath/rust-crypto.git?branch=avx2)",
- "rustfm-scrobble 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "rustfm-scrobble 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_derive 0.9.15 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde_json 0.9.10 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -678,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "rustfm-scrobble"
-version = "0.3.0"
+version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "reqwest 0.7.3 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -1275,7 +1275,7 @@ dependencies = [
 "checksum rust-crypto 0.2.36 (registry+https://github.com/rust-lang/crates.io-index)" = "f76d05d3993fd5f4af9434e8e436db163a12a9d40e1a58a726f27a01dfd12a2a"
 "checksum rustc-serialize 0.3.24 (registry+https://github.com/rust-lang/crates.io-index)" = "dcf128d1287d2ea9d80910b5f1120d0b8eede3fbf1abe91c40d39ea7d51e6fda"
 "checksum rustc_version 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "c5f5376ea5e30ce23c03eb77cbe4962b988deead10910c372b226388b594c084"
-"checksum rustfm-scrobble 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "99f6caea915b10ccee3e0feccef4ba8f1fd6a0947ab2d681b5236d1fffdfd78d"
+"checksum rustfm-scrobble 0.3.1 (registry+https://github.com/rust-lang/crates.io-index)" = "6b4e57e3503c50ffac885c7c8e50b9a7bc003b488bf4da91ebede1bb784e9884"
 "checksum safemem 0.2.0 (registry+https://github.com/rust-lang/crates.io-index)" = "e27a8b19b835f7aea908818e871f5cc3a5a186550c30773be987e155e8163d8f"
 "checksum schannel 0.1.7 (registry+https://github.com/rust-lang/crates.io-index)" = "14a5f8491ae5fc8c51aded1f5806282a0218b4d69b1b76913a0559507e559b90"
 "checksum scoped-tls 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f417c22df063e9450888a7561788e9bd46d3bb3c1466435b4eccb903807f147d"
