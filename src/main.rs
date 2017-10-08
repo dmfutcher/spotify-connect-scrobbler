@@ -121,7 +121,7 @@ fn setup(args: &[String]) -> Setup {
              version::short_now(),
              version::build_id());
 
-    let backend_name = matches.opt_str("backend");
+    let backend_name = matches.opt_str("backend").or(Some(String::from("pipe")));
     if backend_name == Some("?".into()) {
         list_backends();
         exit(0);
