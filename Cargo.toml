@@ -1,6 +1,6 @@
 [package]
 name = "spotify-connect-scrobbler"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["David Futcher <david@futcher.io>", "Paul Liétar <paul@lietar.net>"]
 build = "build.rs"
 license = "MIT"

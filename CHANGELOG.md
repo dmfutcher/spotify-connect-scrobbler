@@ -1,3 +1,10 @@
+Version 0.1.2 - 2017-11-05
+==========================
+
+ * Replace StdoutSink with NilSink, stops binary music data being piped
+   to the terminal's stdout. (#9)
+ * Remove `--backend` flag, will always be set to NilSink (#4)
+
 Version 0.1.1 - 2017-10-04
 ==========================
 
