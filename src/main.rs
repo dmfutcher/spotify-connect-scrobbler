@@ -26,7 +26,6 @@ use librespot::core::config::{DeviceType, SessionConfig, ConnectConfig};
 use librespot::core::session::Session;
 use librespot::core::version;
 
-use librespot::discovery::{discovery, DiscoveryStream};
 use librespot::scrobbler::ScrobblerConfig;
 use librespot::spirc::{Spirc, SpircTask};
 
@@ -62,7 +61,6 @@ struct Setup {
     session_config: SessionConfig,
     connect_config: ConnectConfig,
     credentials: Option<Credentials>,
-    enable_discovery: bool,
     scrobbler_config: ScrobblerConfig
 }
 
@@ -77,7 +75,6 @@ fn setup(args: &[String]) -> Setup {
         .optflag("v", "verbose", "Enable verbose output")
         .optopt("", "spotify-username", "Username to sign in with", "USERNAME")
         .optopt("", "spotify-password", "Password", "PASSWORD")
-        .optflag("", "disable-discovery", "Disable discovery mode")
         .optopt("", "lastfm-username", "Last.fm Username", "LASTFM_USERNAME")
         .optopt("", "lastfm-password", "Last.fm Password", "LASTFM_PASSWORD")
         .optopt("", "lastfm-api-key", "Last.fm API Key", "API_KEY")
@@ -139,14 +136,11 @@ fn setup(args: &[String]) -> Setup {
         }
     };
 
-    let enable_discovery = !matches.opt_present("disable-discovery");
-
     Setup {
         cache: cache,
         session_config: session_config,
         connect_config: connect_config,
         credentials: credentials,
-        enable_discovery: enable_discovery,
         scrobbler_config: scrobbler_config
     }
 }
@@ -157,7 +151,6 @@ struct Main {
     connect_config: ConnectConfig,
     handle: Handle,
 
-    discovery: Option<DiscoveryStream>,
     signal: IoStream<()>,
 
     spirc: Option<Spirc>,
@@ -178,20 +171,12 @@ impl Main {
             connect_config: setup.connect_config,
 
             connect: Box::new(futures::future::empty()),
-            discovery: None,
             spirc: None,
             spirc_task: None,
             shutdown: false,
             signal: tokio_signal::ctrl_c(&handle).flatten_stream().boxed(),
             scrobbler_config: setup.scrobbler_config
         };
-
-        if setup.enable_discovery {
-            let config = task.connect_config.clone();
-            let device_id = task.session_config.device_id.clone();
-
-            task.discovery = Some(discovery(&handle, config, device_id).unwrap());
-        }
 
         if let Some(credentials) = setup.credentials {
             task.credentials(credentials);
@@ -222,15 +207,6 @@ impl Future for Main {
     fn poll(&mut self) -> Poll<(), ()> {
         loop {
             let mut progress = false;
-
-            if let Some(Async::Ready(Some(creds))) = self.discovery.as_mut().map(|d| d.poll().unwrap()) {
-                if let Some(ref spirc) = self.spirc {
-                    spirc.shutdown();
-                }
-                self.credentials(creds);
-
-                progress = true;
-            }
 
             if let Async::Ready(session) = self.connect.poll().unwrap() {
                 self.connect = Box::new(futures::future::empty());

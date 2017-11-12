@@ -6,8 +6,10 @@
 #![allow(deprecated)]
 
 #[macro_use] extern crate log;
-#[macro_use] extern crate serde_json;
-#[macro_use] extern crate serde_derive;
+
+#[macro_use]
+extern crate serde_derive;
+extern crate serde_json;
 
 extern crate base64;
 extern crate crypto;
@@ -25,16 +27,6 @@ pub extern crate librespot_core as core;
 pub extern crate librespot_protocol as protocol;
 pub extern crate librespot_metadata as metadata;
 
-#[cfg(feature = "alsa-backend")]
-extern crate alsa;
-
-#[cfg(feature = "portaudio-rs")]
-extern crate portaudio_rs;
-
-#[cfg(feature = "libpulse-sys")]
-extern crate libpulse_sys;
-
-pub mod discovery;
 pub mod keymaster;
 pub mod scrobbler;
 
