@@ -11,17 +11,12 @@
 extern crate serde_derive;
 extern crate serde_json;
 
-extern crate base64;
-extern crate crypto;
 extern crate futures;
-extern crate hyper;
-extern crate mdns;
 extern crate num_bigint;
 extern crate protobuf;
 extern crate rand;
 extern crate rustfm_scrobble;
 extern crate tokio_core;
-extern crate url;
 
 pub extern crate librespot_core as core;
 pub extern crate librespot_protocol as protocol;

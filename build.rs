@@ -1,11 +1,7 @@
 extern crate protobuf_macros;
-extern crate rand;
 
-use rand::Rng;
 use std::env;
 use std::path::PathBuf;
-use std::fs::OpenOptions;
-use std::io::Write;
 
 fn main() {
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
