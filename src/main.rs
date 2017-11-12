@@ -30,6 +30,7 @@ use librespot::audio_backend::{self, Sink, BACKENDS};
 use librespot::discovery::{discovery, DiscoveryStream};
 use librespot::mixer::{self, Mixer};
 use librespot::player::Player;
+use librespot::scrobbler::ScrobblerConfig;
 use librespot::spirc::{Spirc, SpircTask};
 
 fn usage(program: &str, opts: &getopts::Options) -> String {
@@ -131,8 +132,6 @@ fn setup(args: &[String]) -> Setup {
     let backend = audio_backend::find(backend_name)
         .expect("Invalid backend");
 
-    let device = matches.opt_str("device");
-
     let mixer_name = matches.opt_str("mixer");
     let mixer = mixer::find(mixer_name.as_ref())
         .expect("Invalid mixer");
@@ -144,9 +143,7 @@ fn setup(args: &[String]) -> Setup {
         Cache::new(PathBuf::from(cache_location), use_audio_cache)
     });
 
-    let credentials = {
-        let cached_credentials = cache.as_ref().and_then(Cache::credentials);
-
+    let cached_credentials = cache.as_ref().and_then(Cache::credentials);
     let credentials = get_credentials(matches.opt_str("spotify-username"),
                                       matches.opt_str("spotify-password"),
                                       cached_credentials);
@@ -230,7 +227,7 @@ struct Main {
 }
 
 impl Main {
-    fn new(handle: Handle, setup: Setup, scrobbler_config: ScrobblerConfig) -> Main {
+    fn new(handle: Handle, setup: Setup) -> Main {
         let mut task = Main {
             handle: handle.clone(),
             cache: setup.cache,
@@ -247,7 +244,7 @@ impl Main {
             spirc_task: None,
             shutdown: false,
             signal: tokio_signal::ctrl_c(&handle).flatten_stream().boxed(),
-            scrobbler_config: scrobbler_config
+            scrobbler_config: setup.scrobbler_config
         };
 
         if setup.enable_discovery {

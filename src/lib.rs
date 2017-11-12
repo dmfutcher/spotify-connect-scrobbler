@@ -40,5 +40,6 @@ pub mod discovery;
 pub mod keymaster;
 pub mod mixer;
 pub mod player;
+pub mod scrobbler;
 
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));
