@@ -27,7 +27,6 @@ use librespot::core::session::Session;
 use librespot::core::version;
 
 use librespot::discovery::{discovery, DiscoveryStream};
-use librespot::mixer::{self, Mixer};
 use librespot::scrobbler::ScrobblerConfig;
 use librespot::spirc::{Spirc, SpircTask};
 
@@ -59,8 +58,6 @@ fn setup_logging(verbose: bool) {
 }
 
 struct Setup {
-    mixer: fn() -> Box<Mixer>,
-
     cache: Option<Cache>,
     session_config: SessionConfig,
     connect_config: ConnectConfig,
@@ -81,8 +78,6 @@ fn setup(args: &[String]) -> Setup {
         .optopt("", "spotify-username", "Username to sign in with", "USERNAME")
         .optopt("", "spotify-password", "Password", "PASSWORD")
         .optflag("", "disable-discovery", "Disable discovery mode")
-        .optopt("", "device", "Audio device to use. Use '?' to list options", "DEVICE")
-        .optopt("", "mixer", "Mixer to use", "MIXER")
         .optopt("", "lastfm-username", "Last.fm Username", "LASTFM_USERNAME")
         .optopt("", "lastfm-password", "Last.fm Password", "LASTFM_PASSWORD")
         .optopt("", "lastfm-api-key", "Last.fm API Key", "API_KEY")
@@ -104,10 +99,6 @@ fn setup(args: &[String]) -> Setup {
              version::commit_date(),
              version::short_now(),
              version::build_id());
-
-    let mixer_name = matches.opt_str("mixer");
-    let mixer = mixer::find(mixer_name.as_ref())
-        .expect("Invalid mixer");
 
     let name = matches.opt_str("name").unwrap_or(String::from("Scrobbler"));
     let use_audio_cache = !matches.opt_present("disable-audio-cache");
@@ -156,7 +147,6 @@ fn setup(args: &[String]) -> Setup {
         connect_config: connect_config,
         credentials: credentials,
         enable_discovery: enable_discovery,
-        mixer: mixer,
         scrobbler_config: scrobbler_config
     }
 }
@@ -165,7 +155,6 @@ struct Main {
     cache: Option<Cache>,
     session_config: SessionConfig,
     connect_config: ConnectConfig,
-    mixer: fn() -> Box<Mixer>,
     handle: Handle,
 
     discovery: Option<DiscoveryStream>,
@@ -187,7 +176,6 @@ impl Main {
             cache: setup.cache,
             session_config: setup.session_config,
             connect_config: setup.connect_config,
-            mixer: setup.mixer,
 
             connect: Box::new(futures::future::empty()),
             discovery: None,
@@ -246,10 +234,9 @@ impl Future for Main {
 
             if let Async::Ready(session) = self.connect.poll().unwrap() {
                 self.connect = Box::new(futures::future::empty());
-                let mixer = (self.mixer)();
                 let connect_config = self.connect_config.clone();
 
-                let (spirc, spirc_task) = Spirc::new(connect_config, session, mixer, self.scrobbler_config.clone());
+                let (spirc, spirc_task) = Spirc::new(connect_config, session, self.scrobbler_config.clone());
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
 

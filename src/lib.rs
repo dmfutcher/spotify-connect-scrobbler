@@ -36,7 +36,6 @@ extern crate libpulse_sys;
 
 pub mod discovery;
 pub mod keymaster;
-pub mod mixer;
 pub mod scrobbler;
 
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));

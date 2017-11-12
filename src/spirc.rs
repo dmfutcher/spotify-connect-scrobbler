@@ -15,11 +15,8 @@ use core::version;
 use protocol;
 use protocol::spirc::{PlayStatus, State, MessageType, Frame, DeviceState};
 
-use mixer::Mixer;
 
 pub struct SpircTask {
-    mixer: Box<Mixer>,
-
     sequence: SeqGenerator<u32>,
 
     ident: String,
@@ -121,7 +118,7 @@ fn initial_device_state(config: ConnectConfig, volume: u16) -> DeviceState {
 }
 
 impl Spirc {
-    pub fn new(config: ConnectConfig, session: Session, mixer: Box<Mixer>, scrobbler_config: ScrobblerConfig)
+    pub fn new(config: ConnectConfig, session: Session, scrobbler_config: ScrobblerConfig)
         -> (Spirc, SpircTask)
     {
         debug!("new Spirc[{}]", session.session_id());
@@ -145,13 +142,10 @@ impl Spirc {
 
         let volume = 0xFFFF;
         let device = initial_device_state(config, volume);
-        mixer.set_volume(volume);
 
         let scrobbler = Scrobbler::new(scrobbler_config, session.clone());
 
         let mut task = SpircTask {
-            mixer: mixer,
-
             sequence: SeqGenerator::new(1),
 
             ident: ident,
@@ -316,7 +310,6 @@ impl SpircTask {
             }
             SpircCommand::VolumeUp => {
                 if active {
-                    self.handle_volume_up();
                     self.notify(None);
                 } else {
                     CommandSender::new(self, MessageType::kMessageTypeVolumeUp).send();
@@ -324,7 +317,6 @@ impl SpircTask {
             }
             SpircCommand::VolumeDown => {
                 if active {
-                    self.handle_volume_down();
                     self.notify(None);
                 } else {
                     CommandSender::new(self, MessageType::kMessageTypeVolumeDown).send();
@@ -403,12 +395,10 @@ impl SpircTask {
             }
 
             MessageType::kMessageTypeVolumeUp => {
-                self.handle_volume_up();
                 self.notify(None);
             }
 
             MessageType::kMessageTypeVolumeDown => {
-                self.handle_volume_down();
                 self.notify(None);
             }
 
@@ -428,7 +418,6 @@ impl SpircTask {
             MessageType::kMessageTypeVolume => {
                 let volume = frame.get_volume();
                 self.device.set_volume(volume);
-                self.mixer.set_volume(frame.get_volume() as u16);
                 self.notify(None);
             }
 
@@ -438,7 +427,6 @@ impl SpircTask {
                 {
                     self.device.set_is_active(false);
                     self.state.set_status(PlayStatus::kPlayStatusStop);
-                    self.mixer.stop();
                 }
                 else
                 {
@@ -469,7 +457,6 @@ impl SpircTask {
 
     fn handle_play(&mut self) {
         if self.state.get_status() == PlayStatus::kPlayStatusPause {
-            self.mixer.start();
             self.state.set_status(PlayStatus::kPlayStatusPlay);
             self.state.set_position_measured_at(now_ms() as u64);
         }
@@ -485,7 +472,6 @@ impl SpircTask {
 
     fn handle_pause(&mut self) {
         if self.state.get_status() == PlayStatus::kPlayStatusPlay {
-            self.mixer.stop();
             self.state.set_status(PlayStatus::kPlayStatusPause);
 
             let now = now_ms() as u64;
@@ -531,24 +517,6 @@ impl SpircTask {
             self.state.set_position_ms(0);
             self.state.set_position_measured_at(now_ms() as u64);
         }
-    }
-
-    fn handle_volume_up(&mut self) {
-        let mut volume: u32 = self.mixer.volume() as u32 + 4096;
-        if volume > 0xFFFF {
-            volume = 0xFFFF;
-        }
-        self.device.set_volume(volume);
-        self.mixer.set_volume(volume as u16);
-    }
-
-    fn handle_volume_down(&mut self) {
-        let mut volume: i32 = self.mixer.volume() as i32 - 4096;
-        if volume < 0 {
-            volume = 0;
-        }
-        self.device.set_volume(volume as u32);
-        self.mixer.set_volume(volume as u16);
     }
 
     fn handle_end_of_track(&mut self) {
