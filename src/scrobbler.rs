@@ -21,7 +21,7 @@ pub struct Scrobbler {
     config: ScrobblerConfig,
     scrobbler: rustfm_scrobble::Scrobbler,
 
-    session: Session,
+    session: Box<Session>,
     current_track_id: Option<SpotifyId>,
     current_track_start: Option<Instant>,
     current_track_meta: Option<Scrobble>,
@@ -53,7 +53,7 @@ impl Scrobbler {
 
     pub fn new(config: ScrobblerConfig, session: Session) -> Scrobbler {
         let mut scrobbler = Scrobbler {
-            session: session,
+            session: Box::new(session),
             scrobbler: rustfm_scrobble::Scrobbler::new(config.api_key.clone(), config.api_secret.clone()),
             current_track_id: None,
             current_track_start: None,
@@ -118,16 +118,14 @@ impl Scrobbler {
     }
 
     pub fn get_track_meta(&mut self, track_id: SpotifyId) -> BoxFuture<Scrobble, ScrobbleError> {
-        // TODO: There has to be a less terrible way to do this
         let session = self.session.clone();
-        let session_clone = self.session.clone();
 
-        Track::get(&self.session, track_id).and_then(move |track| {
+        Track::get(&session, track_id).and_then(move |track| {
             let track_name = track.clone().name;
             let artist = *track.artists.first().expect("No artists");
-            Artist::get(&session.clone(), artist).map(move |artist| (track_name, artist.name.clone(), track))
-        }).and_then(move |(track_name, artist_name, track_meta)| {
-            Album::get(&session_clone, track_meta.album).map(|album| (track_name, artist_name, album.name.clone()))
+            Artist::get(&session, artist).map(move |artist| (track_name, artist.name.clone(), track, session))
+        }).and_then(move |(track_name, artist_name, track_meta, session)| {
+            Album::get(&session, track_meta.album).map(|album| (track_name, artist_name, album.name.clone()))
         }).map_err(move |err| {
             ScrobbleError::new(format!("{:?}", err).to_owned())
         }).and_then(move |(track, artist, album)| {
