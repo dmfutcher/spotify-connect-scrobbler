@@ -22,14 +22,12 @@ use std::mem;
 
 use librespot::core::authentication::{get_credentials, Credentials};
 use librespot::core::cache::Cache;
-use librespot::core::config::{Bitrate, DeviceType, PlayerConfig, SessionConfig, ConnectConfig};
+use librespot::core::config::{DeviceType, SessionConfig, ConnectConfig};
 use librespot::core::session::Session;
 use librespot::core::version;
 
-use librespot::audio_backend::{self, Sink, BACKENDS};
 use librespot::discovery::{discovery, DiscoveryStream};
 use librespot::mixer::{self, Mixer};
-use librespot::player::Player;
 use librespot::scrobbler::ScrobblerConfig;
 use librespot::spirc::{Spirc, SpircTask};
 
@@ -60,25 +58,10 @@ fn setup_logging(verbose: bool) {
     }
 }
 
-fn list_backends() {
-    println!("Available Backends : ");
-    for (&(name, _), idx) in BACKENDS.iter().zip(0..) {
-        if idx == 0 {
-            println!("- {} (default)", name);
-        } else {
-            println!("- {}", name);
-        }
-    }
-}
-
 struct Setup {
-    backend: fn(Option<String>) -> Box<Sink>,
-    device: Option<String>,
-
     mixer: fn() -> Box<Mixer>,
 
     cache: Option<Cache>,
-    player_config: PlayerConfig,
     session_config: SessionConfig,
     connect_config: ConnectConfig,
     credentials: Option<Credentials>,
@@ -92,7 +75,6 @@ fn setup(args: &[String]) -> Setup {
         .optflag("", "disable-audio-cache", "Disable caching of the audio data.")
         .optopt("n", "name", "Device name (defaults to Scrobbler)", "NAME")
         .optopt("", "device-type", "Displayed device type", "DEVICE_TYPE")
-        .optopt("b", "bitrate", "Bitrate (96, 160 or 320). Defaults to 160", "BITRATE")
         .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
         .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
         .optflag("v", "verbose", "Enable verbose output")
@@ -122,15 +104,6 @@ fn setup(args: &[String]) -> Setup {
              version::commit_date(),
              version::short_now(),
              version::build_id());
-
-    let backend_name = Some(String::from("nil"));
-    if backend_name == Some("?".into()) {
-        list_backends();
-        exit(0);
-    }
-
-    let backend = audio_backend::find(backend_name)
-        .expect("Invalid backend");
 
     let mixer_name = matches.opt_str("mixer");
     let mixer = mixer::find(mixer_name.as_ref())
@@ -164,19 +137,6 @@ fn setup(args: &[String]) -> Setup {
         password: matches.opt_str("lastfm-password").expect("Invalid Last.fm password")
     };
 
-    let device = matches.opt_str("device");
-    let player_config = {
-        let bitrate = matches.opt_str("b").as_ref()
-            .map(|bitrate| Bitrate::from_str(bitrate).expect("Invalid bitrate"))
-            .unwrap_or(Bitrate::default());
-
-        PlayerConfig {
-            bitrate: bitrate,
-            onstart: matches.opt_str("onstart"),
-            onstop: matches.opt_str("onstop"),
-        }
-    };
-
     let connect_config = {
         let device_type = matches.opt_str("device-type").as_ref()
             .map(|device_type| DeviceType::from_str(device_type).expect("Invalid device type"))
@@ -191,13 +151,10 @@ fn setup(args: &[String]) -> Setup {
     let enable_discovery = !matches.opt_present("disable-discovery");
 
     Setup {
-        backend: backend,
         cache: cache,
         session_config: session_config,
-        player_config: player_config,
         connect_config: connect_config,
         credentials: credentials,
-        device: device,
         enable_discovery: enable_discovery,
         mixer: mixer,
         scrobbler_config: scrobbler_config
@@ -206,11 +163,8 @@ fn setup(args: &[String]) -> Setup {
 
 struct Main {
     cache: Option<Cache>,
-    player_config: PlayerConfig,
     session_config: SessionConfig,
     connect_config: ConnectConfig,
-    backend: fn(Option<String>) -> Box<Sink>,
-    device: Option<String>,
     mixer: fn() -> Box<Mixer>,
     handle: Handle,
 
@@ -232,10 +186,7 @@ impl Main {
             handle: handle.clone(),
             cache: setup.cache,
             session_config: setup.session_config,
-            player_config: setup.player_config,
             connect_config: setup.connect_config,
-            backend: setup.backend,
-            device: setup.device,
             mixer: setup.mixer,
 
             connect: Box::new(futures::future::empty()),
@@ -295,18 +246,10 @@ impl Future for Main {
 
             if let Async::Ready(session) = self.connect.poll().unwrap() {
                 self.connect = Box::new(futures::future::empty());
-                let device = self.device.clone();
                 let mixer = (self.mixer)();
-                let player_config = self.player_config.clone();
                 let connect_config = self.connect_config.clone();
 
-                let audio_filter = mixer.get_audio_filter();
-                let backend = self.backend;
-                let player = Player::new(player_config, session.clone(), audio_filter, move || {
-                    (backend)(device)
-                });
-
-                let (spirc, spirc_task) = Spirc::new(connect_config, session, player, mixer, self.scrobbler_config.clone());
+                let (spirc, spirc_task) = Spirc::new(connect_config, session, mixer, self.scrobbler_config.clone());
                 self.spirc = Some(spirc);
                 self.spirc_task = Some(spirc_task);
 

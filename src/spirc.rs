@@ -16,10 +16,8 @@ use protocol;
 use protocol::spirc::{PlayStatus, State, MessageType, Frame, DeviceState};
 
 use mixer::Mixer;
-use player::Player;
 
 pub struct SpircTask {
-    player: Player,
     mixer: Box<Mixer>,
 
     sequence: SeqGenerator<u32>,
@@ -123,7 +121,7 @@ fn initial_device_state(config: ConnectConfig, volume: u16) -> DeviceState {
 }
 
 impl Spirc {
-    pub fn new(config: ConnectConfig, session: Session, player: Player, mixer: Box<Mixer>, scrobbler_config: ScrobblerConfig)
+    pub fn new(config: ConnectConfig, session: Session, mixer: Box<Mixer>, scrobbler_config: ScrobblerConfig)
         -> (Spirc, SpircTask)
     {
         debug!("new Spirc[{}]", session.session_id());
@@ -152,7 +150,6 @@ impl Spirc {
         let scrobbler = Scrobbler::new(scrobbler_config, session.clone());
 
         let mut task = SpircTask {
-            player: player,
             mixer: mixer,
 
             sequence: SeqGenerator::new(1),
@@ -420,7 +417,6 @@ impl SpircTask {
 
                 self.state.set_position_ms(position);
                 self.state.set_position_measured_at(now_ms() as u64);
-                self.player.seek(position);
                 self.notify(None);
             }
 
@@ -442,7 +438,6 @@ impl SpircTask {
                 {
                     self.device.set_is_active(false);
                     self.state.set_status(PlayStatus::kPlayStatusStop);
-                    self.player.stop();
                     self.mixer.stop();
                 }
                 else
@@ -475,7 +470,6 @@ impl SpircTask {
     fn handle_play(&mut self) {
         if self.state.get_status() == PlayStatus::kPlayStatusPause {
             self.mixer.start();
-            self.player.play();
             self.state.set_status(PlayStatus::kPlayStatusPlay);
             self.state.set_position_measured_at(now_ms() as u64);
         }
@@ -491,7 +485,6 @@ impl SpircTask {
 
     fn handle_pause(&mut self) {
         if self.state.get_status() == PlayStatus::kPlayStatusPlay {
-            self.player.pause();
             self.mixer.stop();
             self.state.set_status(PlayStatus::kPlayStatusPause);
 
@@ -537,7 +530,6 @@ impl SpircTask {
         } else {
             self.state.set_position_ms(0);
             self.state.set_position_measured_at(now_ms() as u64);
-            self.player.seek(0);
         }
     }
 
@@ -592,15 +584,12 @@ impl SpircTask {
         };
         let position = self.state.get_position_ms();
 
-        let end_of_track = self.player.load(track, play, position);
-
         if play {
             self.state.set_status(PlayStatus::kPlayStatusPlay);
         } else {
             self.state.set_status(PlayStatus::kPlayStatusPause);
         }
 
-        self.end_of_track = end_of_track.boxed();
     }
 
     fn hello(&mut self) {

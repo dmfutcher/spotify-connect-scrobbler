@@ -20,8 +20,6 @@ name = "spotify-connect-scrobbler"
 path = "src/main.rs"
 doc = false
 
-[dependencies.librespot-audio]
-path = "audio"
 [dependencies.librespot-core]
 path = "core"
 [dependencies.librespot-metadata]

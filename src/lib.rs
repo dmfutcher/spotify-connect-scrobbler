@@ -21,7 +21,6 @@ extern crate rustfm_scrobble;
 extern crate tokio_core;
 extern crate url;
 
-pub extern crate librespot_audio as audio;
 pub extern crate librespot_core as core;
 pub extern crate librespot_protocol as protocol;
 pub extern crate librespot_metadata as metadata;
@@ -35,11 +34,9 @@ extern crate portaudio_rs;
 #[cfg(feature = "libpulse-sys")]
 extern crate libpulse_sys;
 
-pub mod audio_backend;
 pub mod discovery;
 pub mod keymaster;
 pub mod mixer;
-pub mod player;
 pub mod scrobbler;
 
 include!(concat!(env!("OUT_DIR"), "/lib.rs"));
