@@ -1,20 +1,20 @@
 use futures::sync::oneshot;
 use futures::{future, Future};
 use std::borrow::Cow;
-use std::io::{Read, Seek};
 use std::mem;
 use std::sync::mpsc::{RecvError, TryRecvError};
 use std::thread;
 use std;
-use vorbis::{self, VorbisError};
+
+use core::config::{Bitrate, PlayerConfig};
+use core::session::Session;
+use core::util::{self, SpotifyId, Subfile};
 
 use audio_backend::Sink;
-use audio_decrypt::AudioDecrypt;
-use audio_file::AudioFile;
-use metadata::{FileFormat, Track};
-use session::{Bitrate, Session};
+use audio::{AudioFile, AudioDecrypt};
+use audio::{VorbisDecoder, VorbisPacket};
+use metadata::{FileFormat, Track, Metadata};
 use mixer::AudioFilter;
-use util::{self, SpotifyId, Subfile};
 
 #[derive(Clone)]
 pub struct Player {
@@ -23,6 +23,7 @@ pub struct Player {
 
 struct PlayerInternal {
     session: Session,
+    config: PlayerConfig,
     commands: std::sync::mpsc::Receiver<PlayerCommand>,
 
     state: PlayerState,
@@ -39,8 +40,11 @@ enum PlayerCommand {
 }
 
 impl Player {
-    pub fn new<F>(session: Session, audio_filter: Option<Box<AudioFilter + Send>>, sink_builder: F) -> Player
-        where F: FnOnce() -> Box<Sink> + Send + 'static {
+    pub fn new<F>(config: PlayerConfig, session: Session,
+                  audio_filter: Option<Box<AudioFilter + Send>>,
+                  sink_builder: F) -> Player
+        where F: FnOnce() -> Box<Sink> + Send + 'static
+    {
         let (cmd_tx, cmd_rx) = std::sync::mpsc::channel();
 
         thread::spawn(move || {
@@ -48,6 +52,7 @@ impl Player {
 
             let internal = PlayerInternal {
                 session: session,
+                config: config,
                 commands: cmd_rx,
 
                 state: PlayerState::Stopped,
@@ -93,7 +98,7 @@ impl Player {
     }
 }
 
-type Decoder = vorbis::Decoder<Subfile<AudioDecrypt<AudioFile>>>;
+type Decoder = VorbisDecoder<Subfile<AudioDecrypt<AudioFile>>>;
 enum PlayerState {
     Stopped,
     Paused {
@@ -189,7 +194,7 @@ impl PlayerInternal {
             }
 
             let packet = if let PlayerState::Playing { ref mut decoder, .. } = self.state {
-                Some(decoder.packets().next())
+                Some(decoder.next_packet().expect("Vorbis error"))
             } else { None };
 
             if let Some(packet) = packet {
@@ -198,18 +203,16 @@ impl PlayerInternal {
         }
     }
 
-    fn handle_packet(&mut self, packet: Option<Result<vorbis::Packet, VorbisError>>) {
+    fn handle_packet(&mut self, packet: Option<VorbisPacket>) {
         match packet {
-            Some(Ok(mut packet)) => {
+            Some(mut packet) => {
                 if let Some(ref editor) = self.audio_filter {
-                    editor.modify_stream(&mut packet.data)
+                    editor.modify_stream(&mut packet.data_mut())
                 };
 
-                self.sink.write(&packet.data).unwrap();
+                self.sink.write(&packet.data()).unwrap();
             }
 
-            Some(Err(vorbis::VorbisError::Hole)) => (),
-            Some(Err(e)) => panic!("Vorbis error {:?}", e),
             None => {
                 self.sink.stop().unwrap();
                 self.run_onstop();
@@ -263,7 +266,7 @@ impl PlayerInternal {
 
             PlayerCommand::Seek(position) => {
                 if let Some(decoder) = self.state.decoder() {
-                    match vorbis_time_seek_ms(decoder, position as i64) {
+                    match decoder.seek(position as i64) {
                         Ok(_) => (),
                         Err(err) => error!("Vorbis error: {:?}", err),
                     }
@@ -314,13 +317,13 @@ impl PlayerInternal {
     }
 
     fn run_onstart(&self) {
-        if let Some(ref program) = self.session.config().onstart {
+        if let Some(ref program) = self.config.onstart {
             util::run_program(program)
         }
     }
 
     fn run_onstop(&self) {
-        if let Some(ref program) = self.session.config().onstop {
+        if let Some(ref program) = self.config.onstop {
             util::run_program(program)
         }
     }
@@ -332,7 +335,7 @@ impl PlayerInternal {
             let alternatives = track.alternatives
                 .iter()
                 .map(|alt_id| {
-                    self.session.metadata().get::<Track>(*alt_id)
+                    Track::get(&self.session, *alt_id)
                 });
             let alternatives = future::join_all(alternatives).wait().unwrap();
 
@@ -341,7 +344,7 @@ impl PlayerInternal {
     }
 
     fn load_track(&self, track_id: SpotifyId, position: i64) -> Option<Decoder> {
-        let track = self.session.metadata().get::<Track>(track_id).wait().unwrap();
+        let track = Track::get(&self.session, track_id).wait().unwrap();
 
         info!("Loading track \"{}\"", track.name);
 
@@ -353,7 +356,7 @@ impl PlayerInternal {
             }
         };
 
-        let format = match self.session.config().bitrate {
+        let format = match self.config.bitrate {
             Bitrate::Bitrate96 => FileFormat::OGG_VORBIS_96,
             Bitrate::Bitrate160 => FileFormat::OGG_VORBIS_160,
             Bitrate::Bitrate320 => FileFormat::OGG_VORBIS_320,
@@ -369,13 +372,12 @@ impl PlayerInternal {
 
         let key = self.session.audio_key().request(track.id, file_id).wait().unwrap();
 
-        let open = self.session.audio_file().open(file_id);
-        let encrypted_file = open.wait().unwrap();
-
+        let encrypted_file = AudioFile::open(&self.session, file_id).wait().unwrap();
         let audio_file = Subfile::new(AudioDecrypt::new(key, encrypted_file), 0xa7);
-        let mut decoder = vorbis::Decoder::new(audio_file).unwrap();
 
-        match vorbis_time_seek_ms(&mut decoder, position) {
+        let mut decoder = VorbisDecoder::new(audio_file).unwrap();
+
+        match decoder.seek(position) {
             Ok(_) => (),
             Err(err) => error!("Vorbis error: {:?}", err),
         }
@@ -390,16 +392,6 @@ impl Drop for PlayerInternal {
     fn drop(&mut self) {
         debug!("drop Player[{}]", self.session.session_id());
     }
-}
-
-#[cfg(not(feature = "with-tremor"))]
-fn vorbis_time_seek_ms<R>(decoder: &mut vorbis::Decoder<R>, ms: i64) -> Result<(), vorbis::VorbisError> where R: Read + Seek {
-    decoder.time_seek(ms as f64 / 1000f64)
-}
-
-#[cfg(feature = "with-tremor")]
-fn vorbis_time_seek_ms<R>(decoder: &mut vorbis::Decoder<R>, ms: i64) -> Result<(), vorbis::VorbisError> where R: Read + Seek {
-    decoder.time_seek(ms)
 }
 
 impl ::std::fmt::Debug for PlayerCommand {

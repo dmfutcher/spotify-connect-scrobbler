@@ -3,66 +3,21 @@ use crypto::sha1::Sha1;
 use futures::sync::mpsc;
 use futures::{Future, Stream, BoxFuture, IntoFuture, Poll, Async};
 use std::io;
-use std::result::Result;
-use std::str::FromStr;
 use std::sync::{RwLock, Arc, Weak};
 use tokio_core::io::EasyBuf;
 use tokio_core::reactor::{Handle, Remote};
 use std::sync::atomic::{AtomicUsize, ATOMIC_USIZE_INIT, Ordering};
-use uuid::Uuid;
 
 use apresolve::apresolve_or_fallback;
 use authentication::Credentials;
 use cache::Cache;
 use component::Lazy;
 use connection;
-use version;
+use config::SessionConfig;
 
 use audio_key::AudioKeyManager;
 use channel::ChannelManager;
 use mercury::MercuryManager;
-use metadata::MetadataManager;
-use audio_file::AudioFileManager;
-
-#[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq)]
-pub enum Bitrate {
-    Bitrate96,
-    Bitrate160,
-    Bitrate320,
-}
-impl FromStr for Bitrate {
-    type Err = String;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "96" => Ok(Bitrate::Bitrate96),
-            "160" => Ok(Bitrate::Bitrate160),
-            "320" => Ok(Bitrate::Bitrate320),
-            _ => Err(s.into()),
-        }
-    }
-}
-
-#[derive(Clone)]
-pub struct Config {
-    pub user_agent: String,
-    pub device_id: String,
-    pub bitrate: Bitrate,
-    pub onstart: Option<String>,
-    pub onstop: Option<String>,
-}
-
-impl Default for Config {
-    fn default() -> Config {
-        let device_id = Uuid::new_v4().hyphenated().to_string();
-        Config {
-            user_agent: version::version_string(),
-            device_id: device_id,
-            bitrate: Bitrate::Bitrate160,
-            onstart: None,
-            onstop: None,
-        }
-    }
-}
 
 pub struct SessionData {
     country: String,
@@ -70,16 +25,14 @@ pub struct SessionData {
 }
 
 pub struct SessionInternal {
-    config: Config,
+    config: SessionConfig,
     data: RwLock<SessionData>,
 
     tx_connection: mpsc::UnboundedSender<(u8, Vec<u8>)>,
 
     audio_key: Lazy<AudioKeyManager>,
-    audio_file: Lazy<AudioFileManager>,
     channel: Lazy<ChannelManager>,
     mercury: Lazy<MercuryManager>,
-    metadata: Lazy<MetadataManager>,
     cache: Option<Arc<Cache>>,
 
     handle: Remote,
@@ -99,11 +52,12 @@ pub fn device_id(name: &str) -> String {
 }
 
 impl Session {
-    pub fn connect(config: Config, credentials: Credentials,
+    pub fn connect(config: SessionConfig, credentials: Credentials,
                    cache: Option<Cache>, handle: Handle)
         -> Box<Future<Item=Session, Error=io::Error>>
     {
         let access_point = apresolve_or_fallback::<io::Error>(&handle);
+
 
         let handle_ = handle.clone();
         let connection = access_point.and_then(move |addr| {
@@ -135,7 +89,7 @@ impl Session {
     }
 
     fn create(handle: &Handle, transport: connection::Transport,
-              config: Config, cache: Option<Cache>, username: String)
+              config: SessionConfig, cache: Option<Cache>, username: String)
         -> (Session, BoxFuture<(), io::Error>)
     {
         let (sink, stream) = transport.split();
@@ -157,10 +111,8 @@ impl Session {
             cache: cache.map(Arc::new),
 
             audio_key: Lazy::new(),
-            audio_file: Lazy::new(),
             channel: Lazy::new(),
             mercury: Lazy::new(),
-            metadata: Lazy::new(),
 
             handle: handle.remote().clone(),
 
@@ -182,20 +134,12 @@ impl Session {
         self.0.audio_key.get(|| AudioKeyManager::new(self.weak()))
     }
 
-    pub fn audio_file(&self) -> &AudioFileManager {
-        self.0.audio_file.get(|| AudioFileManager::new(self.weak()))
-    }
-
     pub fn channel(&self) -> &ChannelManager {
         self.0.channel.get(|| ChannelManager::new(self.weak()))
     }
 
     pub fn mercury(&self) -> &MercuryManager {
         self.0.mercury.get(|| MercuryManager::new(self.weak()))
-    }
-
-    pub fn metadata(&self) -> &MetadataManager {
-        self.0.metadata.get(|| MetadataManager::new(self.weak()))
     }
 
     pub fn spawn<F, R>(&self, f: F)
@@ -240,7 +184,7 @@ impl Session {
         self.0.cache.as_ref()
     }
 
-    pub fn config(&self) -> &Config {
+    pub fn config(&self) -> &SessionConfig {
         &self.0.config
     }
 

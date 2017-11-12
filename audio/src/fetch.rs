@@ -3,22 +3,17 @@ use byteorder::{ByteOrder, BigEndian, WriteBytesExt};
 use futures::Stream;
 use futures::sync::{oneshot, mpsc};
 use futures::{Poll, Async, Future};
-use futures::future::{self, FutureResult};
 use std::cmp::min;
 use std::fs;
 use std::io::{self, Read, Write, Seek, SeekFrom};
 use std::sync::{Arc, Condvar, Mutex};
 use tempfile::NamedTempFile;
 
-use channel::{Channel, ChannelData, ChannelError, ChannelHeaders};
-use session::Session;
-use util::FileId;
+use core::channel::{Channel, ChannelData, ChannelError, ChannelHeaders};
+use core::session::Session;
+use core::util::FileId;
 
 const CHUNK_SIZE: usize = 0x20000;
-
-component! {
-    AudioFileManager : AudioFileManagerInner { }
-}
 
 pub enum AudioFile {
     Cached(fs::File),
@@ -26,7 +21,7 @@ pub enum AudioFile {
 }
 
 pub enum AudioFileOpen {
-    Cached(FutureResult<fs::File, ChannelError>),
+    Cached(Option<fs::File>),
     Streaming(AudioFileOpenStreaming),
 }
 
@@ -101,8 +96,8 @@ impl Future for AudioFileOpen {
                 let file = try_ready!(open.poll());
                 Ok(Async::Ready(AudioFile::Streaming(file)))
             }
-            AudioFileOpen::Cached(ref mut open) => {
-                let file = try_ready!(open.poll());
+            AudioFileOpen::Cached(ref mut file) => {
+                let file = file.take().unwrap();
                 Ok(Async::Ready(AudioFile::Cached(file)))
             }
         }
@@ -127,22 +122,22 @@ impl Future for AudioFileOpenStreaming {
     }
 }
 
-impl AudioFileManager {
-    pub fn open(&self, file_id: FileId) -> AudioFileOpen {
-        let cache = self.session().cache().cloned();
+impl AudioFile {
+    pub fn open(session: &Session, file_id: FileId) -> AudioFileOpen {
+        let cache = session.cache().cloned();
 
         if let Some(file) = cache.as_ref().and_then(|cache| cache.file(file_id)) {
             debug!("File {} already in cache", file_id);
-            return AudioFileOpen::Cached(future::ok(file));
+            return AudioFileOpen::Cached(Some(file));
         }
 
         debug!("Downloading file {}", file_id);
 
         let (complete_tx, complete_rx) = oneshot::channel();
-        let (headers, data) = request_chunk(&self.session(), file_id, 0).split();
+        let (headers, data) = request_chunk(session, file_id, 0).split();
 
         let open = AudioFileOpenStreaming {
-            session: self.session(),
+            session: session.clone(),
             file_id: file_id,
 
             headers: headers,
@@ -151,10 +146,10 @@ impl AudioFileManager {
             complete_tx: Some(complete_tx),
         };
 
-        let session = self.session();
-        self.session().spawn(move |_| {
+        let session_ = session.clone();
+        session.spawn(move |_| {
             complete_rx.map(move |mut file| {
-                if let Some(cache) = session.cache() {
+                if let Some(cache) = session_.cache() {
                     cache.save_file(file_id, &mut file);
                     debug!("File {} complete, saving to cache", file_id);
                 } else {
@@ -251,7 +246,7 @@ impl AudioFileFetch {
         let complete_tx = self.complete_tx.take().unwrap();
 
         output.seek(SeekFrom::Start(0)).unwrap();
-        complete_tx.complete(output);
+        let _ = complete_tx.send(output);
     }
 }
 

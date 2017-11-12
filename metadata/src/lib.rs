@@ -1,11 +1,19 @@
+extern crate byteorder;
+extern crate futures;
+extern crate linear_map;
+extern crate protobuf;
+
+extern crate librespot_core as core;
+extern crate librespot_protocol as protocol;
+
+pub mod cover;
+
 use futures::{Future, BoxFuture};
 use linear_map::LinearMap;
-use protobuf;
 
-use mercury::MercuryError;
-use protocol;
-use session::Session;
-use util::{SpotifyId, FileId, StrChunksExt};
+use core::mercury::MercuryError;
+use core::session::Session;
+use core::util::{SpotifyId, FileId, StrChunksExt};
 
 pub use protocol::metadata::AudioFile_Format as FileFormat;
 
@@ -43,11 +51,24 @@ fn parse_restrictions<'s, I>(restrictions: I, country: &str, catalogue: &str) ->
     (!has_allowed || countrylist_contains(allowed.as_str(), country))
 }
 
-pub trait MetadataTrait : Send + 'static {
+pub trait Metadata : Send + Sized + 'static {
     type Message: protobuf::MessageStatic;
 
     fn base_url() -> &'static str;
     fn parse(msg: &Self::Message, session: &Session) -> Self;
+
+    fn get(session: &Session, id: SpotifyId) -> BoxFuture<Self, MercuryError> {
+        let uri = format!("{}/{}", Self::base_url(), id.to_base16());
+        let request = session.mercury().get(uri);
+
+        let session = session.clone();
+        request.and_then(move |response| {
+            let data = response.payload.first().expect("Empty payload");
+            let msg: Self::Message = protobuf::parse_from_bytes(data).unwrap();
+
+            Ok(Self::parse(&msg, &session))
+        }).boxed()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -77,7 +98,7 @@ pub struct Artist {
     pub top_tracks: Vec<SpotifyId>,
 }
 
-impl MetadataTrait for Track {
+impl Metadata for Track {
     type Message = protocol::metadata::Track;
 
     fn base_url() -> &'static str {
@@ -120,7 +141,7 @@ impl MetadataTrait for Track {
     }
 }
 
-impl MetadataTrait for Album {
+impl Metadata for Album {
     type Message = protocol::metadata::Album;
 
     fn base_url() -> &'static str {
@@ -163,7 +184,7 @@ impl MetadataTrait for Album {
 }
 
 
-impl MetadataTrait for Artist {
+impl Metadata for Artist {
     type Message = protocol::metadata::Artist;
 
     fn base_url() -> &'static str {
@@ -173,15 +194,19 @@ impl MetadataTrait for Artist {
     fn parse(msg: &Self::Message, session: &Session) -> Self {
         let country = session.country();
 
-        let top_tracks = msg.get_top_track()
+        let top_tracks: Vec<SpotifyId> = match msg.get_top_track()
                             .iter()
-                            .find(|tt| !tt.has_country() || countrylist_contains(tt.get_country(), &country))
-                            .unwrap()
-                            .get_track()
-                            .iter()
-                            .filter(|track| track.has_gid())
-                            .map(|track| SpotifyId::from_raw(track.get_gid()))
-                            .collect::<Vec<_>>();
+                            .find(|tt| !tt.has_country() || countrylist_contains(tt.get_country(), &country)) {
+                                Some(tracks) => {
+                                    tracks.get_track()
+                                    .iter()
+                                    .filter(|track| track.has_gid())
+                                    .map(|track| SpotifyId::from_raw(track.get_gid()))
+                                    .collect::<Vec<_>>()
+                                },
+                                None => Vec::new()
+                            };
+
 
         Artist {
             id: SpotifyId::from_raw(msg.get_gid()),
@@ -191,22 +216,3 @@ impl MetadataTrait for Artist {
     }
 }
 
-component! {
-    MetadataManager : MetadataManagerInner { }
-}
-
-impl MetadataManager {
-    pub fn get<T: MetadataTrait>(&self, id: SpotifyId) -> BoxFuture<T, MercuryError> {
-        let session = self.session();
-
-        let uri = format!("{}/{}", T::base_url(), id.to_base16());
-        let request = session.mercury().get(uri);
-
-        request.and_then(move |response| {
-            let data = response.payload.first().expect("Empty payload");
-            let msg: T::Message = protobuf::parse_from_bytes(data).unwrap();
-
-            Ok(T::parse(&msg, &session))
-        }).boxed()
-    }
-}
