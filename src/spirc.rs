@@ -1,8 +1,7 @@
-use futures::future;
 use futures::sink::BoxSink;
 use futures::stream::BoxStream;
-use futures::sync::{oneshot, mpsc};
-use futures::{Future, Stream, Sink, Async, Poll, BoxFuture};
+use futures::sync::mpsc;
+use futures::{Future, Stream, Sink, Async, Poll};
 use protobuf::{self, Message};
 
 use core::config::ConnectConfig;
@@ -26,7 +25,6 @@ pub struct SpircTask {
     subscription: BoxStream<Frame, MercuryError>,
     sender: BoxSink<Frame, MercuryError>,
     commands: mpsc::UnboundedReceiver<SpircCommand>,
-    end_of_track: BoxFuture<(), oneshot::Canceled>,
 
     shutdown: bool,
     session: Session,
@@ -35,13 +33,6 @@ pub struct SpircTask {
 }
 
 pub enum SpircCommand {
-    Play,
-    PlayPause,
-    Pause,
-    Prev,
-    Next,
-    VolumeUp,
-    VolumeDown,
     Shutdown
 }
 
@@ -156,7 +147,6 @@ impl Spirc {
             subscription: subscription,
             sender: sender,
             commands: cmd_rx,
-            end_of_track: future::empty().boxed(),
 
             shutdown: false,
             session: session.clone(),
@@ -173,27 +163,6 @@ impl Spirc {
         (spirc, task)
     }
 
-    pub fn play(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::Play);
-    }
-    pub fn play_pause(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::PlayPause);
-    }
-    pub fn pause(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::Pause);
-    }
-    pub fn prev(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::Prev);
-    }
-    pub fn next(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::Next);
-    }
-    pub fn volume_up(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::VolumeUp);
-    }
-    pub fn volume_down(&self) {
-        let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::VolumeDown);
-    }
     pub fn shutdown(&self) {
         let _ = mpsc::UnboundedSender::send(&self.commands, SpircCommand::Shutdown);
     }
@@ -226,17 +195,6 @@ impl Future for SpircTask {
                     Async::NotReady => (),
                 }
 
-                match self.end_of_track.poll() {
-                    Ok(Async::Ready(())) => {
-                        progress = true;
-                        self.handle_end_of_track();
-                    }
-                    Ok(Async::NotReady) => (),
-                    Err(oneshot::Canceled) => {
-                        self.end_of_track = future::empty().boxed()
-                    }
-                }
-
                 match self.scrobbler.poll() {
                     Ok(Async::Ready(_)) => {
                         progress = true;
@@ -266,62 +224,7 @@ impl Future for SpircTask {
 
 impl SpircTask {
     fn handle_command(&mut self, cmd: SpircCommand) {
-        let active = self.device.get_is_active();
         match cmd {
-            SpircCommand::Play => {
-                if active {
-                    self.handle_play();
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypePlay).send();
-                }
-            }
-            SpircCommand::PlayPause => {
-                if active {
-                    self.handle_play_pause();
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypePlayPause).send();
-                }
-            }
-            SpircCommand::Pause => {
-                if active {
-                    self.handle_pause();
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypePause).send();
-                }
-            }
-            SpircCommand::Prev => {
-                if active {
-                    self.handle_prev();
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypePrev).send();
-                }
-            }
-            SpircCommand::Next => {
-                if active {
-                    self.handle_next();
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypeNext).send();
-                }
-            }
-            SpircCommand::VolumeUp => {
-                if active {
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypeVolumeUp).send();
-                }
-            }
-            SpircCommand::VolumeDown => {
-                if active {
-                    self.notify(None);
-                } else {
-                    CommandSender::new(self, MessageType::kMessageTypeVolumeDown).send();
-                }
-            }
             SpircCommand::Shutdown => {
                 CommandSender::new(self, MessageType::kMessageTypeGoodbye).send();
                 self.shutdown = true;
@@ -348,216 +251,28 @@ impl SpircTask {
                 self.notify(Some(frame.get_ident()));
             }
 
-            MessageType::kMessageTypeLoad => {
-                if !self.device.get_is_active() {
-                    self.device.set_is_active(true);
-                    self.device.set_became_active_at(now_ms());
-                }
-
-                self.update_tracks(&frame);
-
-                if self.state.get_track().len() > 0 {
-                    self.state.set_position_ms(frame.get_state().get_position_ms());
-                    self.state.set_position_measured_at(now_ms() as u64);
-
-                    let play = frame.get_state().get_status() == PlayStatus::kPlayStatusPlay;
-                    self.load_track(play);
-                } else {
-                    self.state.set_status(PlayStatus::kPlayStatusStop);
-                }
-
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypePlay => {
-                self.handle_play();
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypePlayPause => {
-                self.handle_play_pause();
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypePause => {
-                self.handle_pause();
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeNext => {
-                self.handle_next();
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypePrev => {
-                self.handle_prev();
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeVolumeUp => {
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeVolumeDown => {
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeSeek => {
-                let position = frame.get_position();
-
-                self.state.set_position_ms(position);
-                self.state.set_position_measured_at(now_ms() as u64);
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeReplace => {
-                self.update_tracks(&frame);
-                self.notify(None);
-            }
-
-            MessageType::kMessageTypeVolume => {
-                let volume = frame.get_volume();
-                self.device.set_volume(volume);
-                self.notify(None);
-            }
-
             MessageType::kMessageTypeNotify => {
-                if self.device.get_is_active() &&
-                    frame.get_device_state().get_is_active()
-                {
-                    self.device.set_is_active(false);
-                    self.state.set_status(PlayStatus::kPlayStatusStop);
+                // Inactive devices won't be playing anything, so we don't need to scrobble it
+                if !frame.get_device_state().get_is_active() {
+                    return ();
                 }
-                else
-                {
-                    // scrobble hacks here
-                    
-                    // Inactive devices won't be playing anything, so we don't need to scrobble it
-                    if !frame.get_device_state().get_is_active() {
-                        return ();
-                    }
 
-                    //println!("{:?}", frame);
-                    //println!("Type: {:?}", frame.get_typ());
-                    let state = frame.get_state();
-                    let playing_index = state.get_playing_track_index();
-                    let tracks = state.get_track();
-                    if tracks.len() > 0 {
-                        let playing_track_ref = state.get_track()[playing_index as usize].clone();
-                        let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
+                //println!("{:?}", frame);
+                //println!("Type: {:?}", frame.get_typ());
+                let state = frame.get_state();
+                let playing_index = state.get_playing_track_index();
+                let tracks = state.get_track();
+                if tracks.len() > 0 {
+                    let playing_track_ref = state.get_track()[playing_index as usize].clone();
+                    let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
 
-                        self.scrobbler.update_current_track(playing_track_spotify_id);
-                        info!("Relevant SPIRC frame; Current track Spotify ID: {:?}", playing_track_spotify_id);
-                    }
+                    self.scrobbler.update_current_track(playing_track_spotify_id);
+                    info!("Relevant SPIRC frame; Current track Spotify ID: {:?}", playing_track_spotify_id);
                 }
+                
             }
             _ => (),
         }
-    }
-
-    fn handle_play(&mut self) {
-        if self.state.get_status() == PlayStatus::kPlayStatusPause {
-            self.state.set_status(PlayStatus::kPlayStatusPlay);
-            self.state.set_position_measured_at(now_ms() as u64);
-        }
-    }
-
-    fn handle_play_pause(&mut self) {
-        match self.state.get_status() {
-            PlayStatus::kPlayStatusPlay => self.handle_pause(),
-            PlayStatus::kPlayStatusPause => self.handle_play(),
-            _ => (),
-        }
-    }
-
-    fn handle_pause(&mut self) {
-        if self.state.get_status() == PlayStatus::kPlayStatusPlay {
-            self.state.set_status(PlayStatus::kPlayStatusPause);
-
-            let now = now_ms() as u64;
-            let position = self.state.get_position_ms();
-
-            let diff = now - self.state.get_position_measured_at();
-
-            self.state.set_position_ms(position + diff as u32);
-            self.state.set_position_measured_at(now);
-        }
-    }
-
-    fn handle_next(&mut self) {
-        let current_index = self.state.get_playing_track_index();
-        let new_index = (current_index + 1) % (self.state.get_track().len() as u32);
-
-        self.state.set_playing_track_index(new_index);
-        self.state.set_position_ms(0);
-        self.state.set_position_measured_at(now_ms() as u64);
-
-        self.load_track(true);
-    }
-
-    fn handle_prev(&mut self) {
-        // Previous behaves differently based on the position
-        // Under 3s it goes to the previous song
-        // Over 3s it seeks to zero
-        if self.position() < 3000 {
-            let current_index = self.state.get_playing_track_index();
-
-            let new_index = if current_index == 0 {
-                self.state.get_track().len() as u32 - 1
-            } else {
-                current_index - 1
-            };
-
-            self.state.set_playing_track_index(new_index);
-            self.state.set_position_ms(0);
-            self.state.set_position_measured_at(now_ms() as u64);
-
-            self.load_track(true);
-        } else {
-            self.state.set_position_ms(0);
-            self.state.set_position_measured_at(now_ms() as u64);
-        }
-    }
-
-    fn handle_end_of_track(&mut self) {
-        let current_index = self.state.get_playing_track_index();
-        let new_index = (current_index + 1) % (self.state.get_track().len() as u32);
-
-        self.state.set_playing_track_index(new_index);
-        self.state.set_position_ms(0);
-        self.state.set_position_measured_at(now_ms() as u64);
-
-        self.load_track(true);
-        self.notify(None);
-    }
-
-    fn position(&mut self) -> u32 {
-        let diff = now_ms() as u64 - self.state.get_position_measured_at();
-        self.state.get_position_ms() + diff as u32
-    }
-
-    fn update_tracks(&mut self, frame: &protocol::spirc::Frame) {
-        let index = frame.get_state().get_playing_track_index();
-        let tracks = frame.get_state().get_track();
-
-        self.state.set_playing_track_index(index);
-        self.state.set_track(tracks.into_iter().cloned().collect());
-    }
-
-    fn load_track(&mut self, play: bool) {
-        let index = self.state.get_playing_track_index();
-        let track = {
-            let gid = self.state.get_track()[index as usize].get_gid();
-            SpotifyId::from_raw(gid)
-        };
-        let position = self.state.get_position_ms();
-
-        if play {
-            self.state.set_status(PlayStatus::kPlayStatusPlay);
-        } else {
-            self.state.set_status(PlayStatus::kPlayStatusPause);
-        }
-
     }
 
     fn hello(&mut self) {
