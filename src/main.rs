@@ -67,11 +67,8 @@ struct Setup {
 fn setup(args: &[String]) -> Setup {
     let mut opts = getopts::Options::new();
     opts.optopt("c", "cache", "Path to a directory where files will be cached.", "CACHE")
-        .optflag("", "disable-audio-cache", "Disable caching of the audio data.")
         .optopt("n", "name", "Device name (defaults to Scrobbler)", "NAME")
         .optopt("", "device-type", "Displayed device type", "DEVICE_TYPE")
-        .optopt("", "onstart", "Run PROGRAM when playback is about to begin.", "PROGRAM")
-        .optopt("", "onstop", "Run PROGRAM when playback has ended.", "PROGRAM")
         .optflag("v", "verbose", "Enable verbose output")
         .optopt("", "spotify-username", "Username to sign in with", "USERNAME")
         .optopt("", "spotify-password", "Password", "PASSWORD")
@@ -98,7 +95,7 @@ fn setup(args: &[String]) -> Setup {
              version::build_id());
 
     let name = matches.opt_str("name").unwrap_or(String::from("Scrobbler"));
-    let use_audio_cache = !matches.opt_present("disable-audio-cache");
+    let use_audio_cache = false;
 
     let cache = matches.opt_str("c").map(|cache_location| {
         Cache::new(PathBuf::from(cache_location), use_audio_cache)
