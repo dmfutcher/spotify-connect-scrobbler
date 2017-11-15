@@ -82,23 +82,23 @@ impl Scrobbler {
         }.boxed()
     }
 
-    pub fn update_current_track(&mut self, track_id: SpotifyId) {
-        // TODO: Doesn't understand when a track is played on repeat
-        let mut new_track = false;
-
-        match self.current_track_id {
-            None => { 
-                new_track = true;
-            },
-            Some(id) => {
-                if id != track_id {
-                    new_track = true;
+    pub fn update_current_track(&mut self, track_id: SpotifyId, force_new_track: bool) {
+        if !force_new_track {
+            let mut new_track_detected = false;
+            match self.current_track_id {
+                None => { 
+                    new_track_detected = true;
+                },
+                Some(id) => {
+                    if id != track_id {
+                        new_track_detected = true;
+                    }
                 }
             }
-        }
 
-        if !new_track {
-            return
+            if !new_track_detected {
+                return
+            }
         }
 
         if self.can_scrobble_track() {

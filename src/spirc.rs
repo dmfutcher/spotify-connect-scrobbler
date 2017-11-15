@@ -257,16 +257,16 @@ impl SpircTask {
                     return ();
                 }
 
-                //println!("{:?}", frame);
-                //println!("Type: {:?}", frame.get_typ());
+                //info!("{:?}", frame);
                 let state = frame.get_state();
                 let playing_index = state.get_playing_track_index();
                 let tracks = state.get_track();
                 if tracks.len() > 0 {
                     let playing_track_ref = state.get_track()[playing_index as usize].clone();
                     let playing_track_spotify_id = SpotifyId::from_raw(playing_track_ref.get_gid());
+                    let force_new_track = state.get_position_ms() == 0;
 
-                    self.scrobbler.update_current_track(playing_track_spotify_id);
+                    self.scrobbler.update_current_track(playing_track_spotify_id, force_new_track);
                     info!("Relevant SPIRC frame; Current track Spotify ID: {:?}", playing_track_spotify_id);
                 }
                 
