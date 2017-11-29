@@ -7,7 +7,7 @@
 
 To use *spotify-connect-scrobbler* have your Spotify username & password, your Last.fm username & password, plus a [Last.fm API key and API secret](https://www.last.fm/api/account/create) to hand.
 
-Clone the repo & build with Cargo (`cargo build`). Then run:
+Clone the repo,have Rust installed (`v1.18` minimum required) build with Cargo (`cargo build`). Then run:
 
 `./target/debug/spotify-connect-scrobbler --spotify-username <Spotify username> --spotify-password <Spotify password> --lastfm-username <Last.fm username> --lastfm-password <Last.fm password> --lastfm-api-key <Last.fm API key> --lastfm-api-secret <Last.fm API secret>`
 
