@@ -115,11 +115,16 @@ fn setup(args: &[String]) -> Setup {
         }
     };
 
+    let api_key = matches.opt_str("lastfm-api-key").expect("Invalid Last.fm API key");
+    let api_secret = matches.opt_str("lastfm-api-secret").expect("Invalid Last.fm API secret");
+    let username = matches.opt_str("lastfm-username").expect("Invalid Last.fm username");
+    let password = matches.opt_str("lastfm-password").expect("Invalid Last.fm password");
+
     let scrobbler_config = ScrobblerConfig {
-        api_key: matches.opt_str("lastfm-api-key").expect("Invalid Last.fm API key"),
-        api_secret: matches.opt_str("lastfm-api-secret").expect("Invalid Last.fm API secret"),
-        username: matches.opt_str("lastfm-username").expect("Invalid Last.fm username"),
-        password: matches.opt_str("lastfm-password").expect("Invalid Last.fm password")
+        api_key: api_key,
+        api_secret: api_secret,
+        username: username,
+        password: password,
     };
 
     let connect_config = {

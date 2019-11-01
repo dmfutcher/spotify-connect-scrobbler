@@ -2,8 +2,7 @@ use std::time::{Duration, Instant};
 
 use futures::{Future, BoxFuture, Async, Poll};
 use futures::future;
-use rustfm_scrobble;
-use rustfm_scrobble::metadata::Scrobble;
+use rustfm_scrobble::{self, Scrobble};
 
 use metadata::{Track, Artist, Album, Metadata};
 use core::session::Session;
@@ -14,7 +13,7 @@ pub struct ScrobblerConfig {
     pub api_key: String,
     pub api_secret: String,
     pub username: String,
-    pub password: String
+    pub password: String,
 }
 
 pub struct Scrobbler {
@@ -54,7 +53,7 @@ impl Scrobbler {
     pub fn new(config: ScrobblerConfig, session: Session) -> Scrobbler {
         let mut scrobbler = Scrobbler {
             session: Box::new(session),
-            scrobbler: rustfm_scrobble::Scrobbler::new(config.api_key.clone(), config.api_secret.clone()),
+            scrobbler: rustfm_scrobble::Scrobbler::new(&config.api_key, &config.api_secret),
             current_track_id: None,
             current_track_start: None,
             current_track_meta: None,
@@ -76,7 +75,7 @@ impl Scrobbler {
     }
 
     pub fn auth(&mut self) -> BoxFuture<(), rustfm_scrobble::ScrobblerError> {
-        match self.scrobbler.authenticate(self.config.username.clone(), self.config.password.clone()) {
+        match self.scrobbler.authenticate_with_password(&self.config.username, &self.config.password) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(err)
         }.boxed()
@@ -129,14 +128,14 @@ impl Scrobbler {
         }).map_err(move |err| {
             ScrobbleError::new(format!("{:?}", err).to_owned())
         }).and_then(move |(track, artist, album)| {
-            future::ok(Scrobble::new(artist, track, album))
+            future::ok(Scrobble::new(&artist, &track, &album))
         }).boxed()
     }
 
     pub fn send_now_playing(&self, track: &Scrobble) -> BoxFuture<(), ScrobbleError> {
         info!("Now-playing scrobble: {:?}", track);
 
-        match self.scrobbler.now_playing(track.clone()) {
+        match self.scrobbler.now_playing(track) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
@@ -158,7 +157,7 @@ impl Scrobbler {
     pub fn send_scrobble(&self, scrobble: &Scrobble) -> BoxFuture<(), ScrobbleError> {
         info!("Scrobbling: {:?}", scrobble);
 
-        match self.scrobbler.scrobble(scrobble.clone()) {
+        match self.scrobbler.scrobble(scrobble) {
             Ok(_) => future::ok(()),
             Err(err) => future::err(ScrobbleError::new(format!("{:?}", err)))
         }.boxed()
