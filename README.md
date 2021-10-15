@@ -1,7 +1,8 @@
 # spotify-connect-scrobbler
-[![Build Status](https://travis-ci.org/bobbo/spotify-connect-scrobbler.svg?branch=master)](https://travis-ci.org/bobbo/spotify-connect-scrobbler)
 
-*spotify-connect-scrobbler* is a Last.fm music logging ("scrobbling") service for Spotify. It uses [Spotify Connect](https://www.spotify.com/connect/) to allow you to  log music played on any Spotify device, including those which do not have any Last.fm support (such as Amazon Echo).
+**This project deprecated since Spotify changed the way their Last.fm integration works. Scrobbling now happens on Spotify's servers, rather than the client, so all Connect devices can now scrobble. This is left here for posterity as it's one of my favourite hacks.**
+
+*spotify-connect-scrobbler* is a Last.fm music logging ("scrobbling") service for Spotify. It uses [Spotify Connect](https://www.spotify.com/connect/) to allow you to log music played on any Spotify device, including those which do not have any Last.fm support (such as Amazon Echo).
 
 # Usage
 
